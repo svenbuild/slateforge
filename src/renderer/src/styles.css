@@ -1184,6 +1184,39 @@ kbd {
   text-decoration: line-through;
 }
 
+.note-content table {
+  border-collapse: collapse;
+  margin: 0 0 0.8em;
+}
+
+.note-content th,
+.note-content td {
+  border: 1px solid var(--border-strong);
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 60px;
+}
+
+.note-content th {
+  background: var(--hover);
+  font-weight: 600;
+}
+
+.note-content th > p,
+.note-content td > p {
+  margin: 0;
+}
+
+.editor-notice {
+  margin: 0 28px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--warning);
+  border-radius: 7px;
+  color: var(--warning);
+  font-size: 13px;
+}
+
 .note-content blockquote {
   margin: 0 0 0.6em;
   padding-left: 14px;

@@ -113,6 +113,8 @@ export interface FileInfo {
   exists: boolean
   // True for Markdown files that are not on a network drive.
   writable: boolean
+  // When the file was last changed, as a number. It grows with every change.
+  modified: number
 }
 
 export interface Settings {

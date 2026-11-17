@@ -70,8 +70,16 @@ export function isNetworkPath(path: string, realPath: (path: string) => string =
 
 export function fileInfo(path: string): FileInfo {
   const kind = fileKind(path)
-  const exists = path !== '' && existsSync(path) && statSync(path).isFile()
-  return { path, name: basename(path), kind, exists, writable: exists && kind === 'markdown' && !isNetworkPath(path) }
+  const stats = path !== '' && existsSync(path) ? statSync(path) : null
+  const exists = stats !== null && stats.isFile()
+  return {
+    path,
+    name: basename(path),
+    kind,
+    exists,
+    writable: exists && kind === 'markdown' && !isNetworkPath(path),
+    modified: exists ? stats.mtimeMs : 0
+  }
 }
 
 // Reads a text file. Only UTF-8 is understood: anything else would come out

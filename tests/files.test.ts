@@ -58,6 +58,8 @@ describe('isNetworkPath', () => {
 describe('fileInfo', () => {
   it('describes a file and says if it may be changed', () => {
     expect(fileInfo(file('notes.md'))).toMatchObject({ name: 'notes.md', kind: 'markdown', exists: true, writable: true })
+    expect(fileInfo(file('notes.md')).modified).toBeGreaterThan(0)
+    expect(fileInfo(file('missing.md')).modified).toBe(0)
     expect(fileInfo(file('paper.pdf'))).toMatchObject({ kind: 'pdf', exists: true, writable: false })
     expect(fileInfo(file('missing.md'))).toMatchObject({ exists: false, writable: false })
     expect(fileInfo(dir)).toMatchObject({ exists: false })

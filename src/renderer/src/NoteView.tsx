@@ -1,4 +1,5 @@
 import { TaskItem, TaskList } from '@tiptap/extension-list'
+import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor, useEditorState, type Editor, type JSONContent } from '@tiptap/react'
@@ -108,8 +109,26 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
+// The letters of a text, without spaces, signs and digits. Two Markdown texts
+// with the same letters say the same, however they are formatted.
+const lettersOf = (text: string): string => text.replace(/[^\p{L}]/gu, '')
+
+// True when the editor would not write back everything that is in the
+// Markdown text, for example because the text holds HTML that it drops.
+function losesText(editor: Editor, markdown: string): boolean {
+  return lettersOf(editor.getMarkdown()) !== lettersOf(markdown)
+}
+
 // The editor with its toolbar. `stored` is the content as it was loaded.
-export function TextEditor(props: { source: EditorSource; stored: string; version: number; readOnly?: boolean }) {
+// With `protect`, a Markdown text that the editor cannot keep completely is
+// only shown, never written back.
+export function TextEditor(props: {
+  source: EditorSource
+  stored: string
+  version: number
+  readOnly?: boolean
+  protect?: boolean
+}) {
   const { source } = props
   const initial = source.parse(props.stored)
   // What the note or file holds, as far as this editor knows.
@@ -118,13 +137,15 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
   const editorRef = useRef<Editor | null>(null)
+  // True while new text is put into the editor.
+  const loading = useRef(false)
 
   // Writes unsaved changes. `blocking` is for a closing window, where an
   // async call could get lost.
   const save = (blocking = false): void => {
     window.clearTimeout(timer.current)
     const current = editorRef.current
-    if (!dirty.current || !current) return
+    if (!dirty.current || !current || locked.current) return
     dirty.current = false
     const previous = stored.current
     const saved = source.save(current, blocking, previous)
@@ -142,6 +163,7 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
       StarterKit.configure({ link: { openOnClick: false } }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      TableKit,
       Placeholder.configure({ placeholder: 'Write something… Try "# " for a heading, "- " for a list or "[ ] " for a checklist.' }),
       Markdown
     ],
@@ -160,13 +182,28 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
         return editorRef.current.commands.insertContent(text, { contentType: 'markdown' })
       }
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: current }) => {
+      // The editor may adjust the text by itself after loading, for example
+      // the layout of a table. Only what the user does, which always happens
+      // inside the focused editor and not while text is being loaded, is a
+      // change to save.
+      if (!current.isFocused || loading.current) return
       dirty.current = true
       window.clearTimeout(timer.current)
       timer.current = window.setTimeout(save, SAVE_DELAY_MS)
     }
   })
   editorRef.current = editor
+
+  // Set when the editor would lose text. Then nothing is ever saved.
+  const locked = useRef(false)
+  const [lossy, setLossy] = useState(false)
+  const protectText = (content: JSONContent | string | null): void => {
+    locked.current = props.protect === true && typeof content === 'string' && losesText(editor, content)
+    setLossy(locked.current)
+    editor.setEditable(!props.readOnly && !locked.current)
+  }
+  useEffect(() => protectText(initial), [])
 
   // The data changed somewhere. Only when it was this text, and the
   // user is not in the middle of typing, the new text replaces the old one.
@@ -180,10 +217,14 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
         if (stale || dirty.current || stored.current !== before || json === before) return
         stored.current = json
         const content = source.parse(json)
+        loading.current = true
         editor.commands.setContent(content ?? '', {
           emitUpdate: false,
           ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
         })
+        // Adjustments that follow at once still belong to the loading.
+        window.setTimeout(() => (loading.current = false), 0)
+        protectText(content)
       })
       // A text that cannot be read right now keeps what the editor shows. The
       // error must not count as a failed call, which would only load again.
@@ -205,7 +246,13 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
 
   return (
     <>
-      {!props.readOnly && <Toolbar editor={editor} />}
+      {!props.readOnly && !lossy && <Toolbar editor={editor} />}
+      {lossy && (
+        <p className="editor-notice">
+          This file has parts that the editor cannot keep, for example HTML. It is shown read only, so nothing gets lost.
+          Change it with "Open with Windows".
+        </p>
+      )}
       <div className="view-body note-body" onClick={(event) => event.target === event.currentTarget && editor.commands.focus('end')}>
         <EditorContent editor={editor} />
       </div>

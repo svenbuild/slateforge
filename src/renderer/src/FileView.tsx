@@ -5,6 +5,9 @@ import { api, getViewBase } from './api'
 import { TextEditor, type EditorSource } from './NoteView'
 import { ViewHeader, cleanMessage, type ViewProps } from './ui'
 
+// How often an open file is checked for changes made by other programs.
+const WATCH_MS = 1500
+
 // A Markdown file is edited as text and written back as Markdown.
 const fileSource = (itemId: number): EditorSource => ({
   load: () => api.readFileText(itemId),
@@ -28,6 +31,8 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
   const [reloads, setReloads] = useState(0)
   // Why the file cannot be shown, for example because it is too large.
   const [problem, setProblem] = useState('')
+  // Counts up when the file changed on disk, so the editor reads it again.
+  const [fileVersion, setFileVersion] = useState(0)
 
   useEffect(() => {
     let stale = false
@@ -45,6 +50,22 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
       stale = true
     }
   }, [item.id, version])
+
+  // Looks at the file every moment. When another program changed it, the
+  // view shows the new content by itself.
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      const now = await api.getFileInfo(item.id).catch(() => null)
+      if (!now) return
+      setInfo((before) => {
+        if (!before || (before.modified === now.modified && before.exists === now.exists)) return before
+        setFileVersion((current) => current + 1)
+        setReloads((current) => current + 1)
+        return now
+      })
+    }, WATCH_MS)
+    return () => window.clearInterval(timer)
+  }, [item.id])
 
   const address = info && `${base}file/${item.id}/${encodeURIComponent(info.name)}?reload=${reloads}`
   const framed = info?.exists && (info.kind === 'html' || info.kind === 'pdf')
@@ -75,7 +96,7 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
         <p className="empty-text page-empty">This kind of file cannot be shown here. Use "Open with Windows".</p>
       )}
       {info?.exists && info.kind === 'markdown' && text !== null && (
-        <TextEditor source={fileSource(item.id)} stored={text} version={version} readOnly={!info.writable} />
+        <TextEditor source={fileSource(item.id)} stored={text} version={version + fileVersion} readOnly={!info.writable} protect />
       )}
       {/* An HTML file may run its scripts, but in a frame of its own that cannot reach the app. */}
       {info?.exists && info.kind === 'html' && address && (
