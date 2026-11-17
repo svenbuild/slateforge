@@ -1,5 +1,6 @@
 // Entries hold content. Folders only group entries and other folders.
-export const ENTRY_TYPES = ['board', 'list', 'note'] as const
+// A page is free HTML, mostly written by AI agents for summaries and reports.
+export const ENTRY_TYPES = ['board', 'list', 'note', 'page'] as const
 export const ITEM_TYPES = [...ENTRY_TYPES, 'folder'] as const
 export const PRIORITIES = ['low', 'medium', 'high'] as const
 export const SORT_MODES = ['manual', 'due', 'priority'] as const
@@ -107,6 +108,7 @@ export interface Stats {
   boards: number
   lists: number
   notes: number
+  pages: number
   tasks: number
   openTasks: number
 }
@@ -137,6 +139,14 @@ export interface Api {
 
   getNote(itemId: number): string
   saveNote(itemId: number, contentJson: string, contentText: string): void
+  // Notes as plain text and Markdown, for scripts and AI agents.
+  getNoteText(itemId: number): string
+  setNoteMarkdown(itemId: number, markdown: string): void
+  createNote(title: string, parentId: number | null, markdown: string): Item
+
+  getPage(itemId: number): string
+  savePage(itemId: number, html: string): void
+  createPage(title: string, parentId: number | null, html: string): Item
 
   search(query: string): SearchResult[]
 
@@ -174,6 +184,12 @@ export const API_METHODS = [
   'listProgress',
   'getNote',
   'saveNote',
+  'getNoteText',
+  'setNoteMarkdown',
+  'createNote',
+  'getPage',
+  'savePage',
+  'createPage',
   'search',
   'listTrash',
   'restore',
@@ -192,4 +208,6 @@ export type RendererApi = {
   [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<ReturnType<Api[K]>>
 } & {
   saveNoteSync(itemId: number, contentJson: string, contentText: string): void
+  // Calls back when another program (the command line tool) changed the data.
+  onExternalChange(callback: () => void): void
 }

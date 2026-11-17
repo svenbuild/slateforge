@@ -14,7 +14,6 @@ import {
   ChevronDown,
   ChevronRight,
   Ellipsis,
-  FolderPlus,
   LayoutDashboard,
   ListFilter,
   Pencil,
@@ -24,7 +23,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { descendantIds, resolveDrop, treeRows, type DropMode } from '../../shared/logic'
-import { ENTRY_TYPES, ITEM_TYPES, type Item, type ItemPatch, type ItemType, type Progress } from '../../shared/types'
+import { ITEM_TYPES, type Item, type ItemPatch, type ItemType, type Progress } from '../../shared/types'
 import { COLORS, ICONS, ItemIcon, TYPE_LABEL, colorKey, iconKey } from './icons'
 import { InlineEdit } from './ui'
 
@@ -241,6 +240,8 @@ export function Sidebar(props: {
   const [filter, setFilter] = useState('')
   const [dragId, setDragId] = useState<number | null>(null)
   const [drop, setDrop] = useState<Drop | null>(null)
+  // Place of the "New" menu on screen while it is open.
+  const [newMenu, setNewMenu] = useState<{ top: number; left: number } | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   // Where the mouse really is. The drag events only report a distance, and
   // that distance is wrong once the list has scrolled during a drag.
@@ -392,15 +393,39 @@ export function Sidebar(props: {
       </DndContext>
 
       <div className="sidebar-new">
-        {ENTRY_TYPES.map((type) => (
-          <button key={type} type="button" className="ghost-button" title={`New ${type}`} onClick={() => props.onCreate(type, null)}>
-            <Plus size={14} />
-            {TYPE_LABEL[type]}
-          </button>
-        ))}
-        <button type="button" className="icon-button" title="New folder" onClick={() => props.onCreate('folder', null)}>
-          <FolderPlus size={15} />
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={(event) => {
+            // Below the button, but never past the lower edge of the window.
+            const anchor = event.currentTarget.getBoundingClientRect()
+            setNewMenu({ top: Math.min(anchor.bottom + 4, window.innerHeight - 190), left: anchor.left })
+          }}
+        >
+          <Plus size={14} />
+          New
         </button>
+        {newMenu && (
+          <>
+            <div className="menu-backdrop" onMouseDown={() => setNewMenu(null)} />
+            <div className="item-menu new-menu" style={newMenu}>
+              {ITEM_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className="menu-row"
+                  onClick={() => {
+                    setNewMenu(null)
+                    props.onCreate(type, null)
+                  }}
+                >
+                  <ItemIcon item={{ type, icon: '', color: '' }} />
+                  {TYPE_LABEL[type]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="sidebar-footer">

@@ -2,7 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { API_METHODS, type RendererApi } from '../shared/types'
 
 const api: Record<string, (...args: unknown[]) => unknown> = {
-  saveNoteSync: (...args) => ipcRenderer.sendSync('api:saveNoteSync', ...args)
+  saveNoteSync: (...args) => ipcRenderer.sendSync('api:saveNoteSync', ...args),
+  onExternalChange: (callback) => ipcRenderer.on('external-change', () => (callback as () => void)())
 }
 for (const method of API_METHODS) {
   api[method] = (...args) => ipcRenderer.invoke(`api:${method}`, ...args)

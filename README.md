@@ -25,6 +25,9 @@ computer: no cloud, no account.
 - **Search** over everything with `Ctrl+K`, usable with the keyboard only.
 - **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
   button brings back the last deleted thing.
+- **Pages** hold free HTML, for summaries, overviews and reports. You can
+  edit the HTML in the app.
+- **Command line tool** for scripts and AI agents, see below.
 - **Own title bar** with the search in the middle.
 - **Settings**: light, dark, black or system design, statistics and the location of
   the data file.
@@ -51,6 +54,21 @@ Other commands:
 | `npm run package`     | Create `dist/Slateforge-win32-x64/Slateforge.exe`        |
 
 The packaged folder can be copied anywhere. Start `Slateforge.exe` inside it.
+
+## Command line tool for AI agents
+
+`bin\slateforge.cmd` does everything the app can do: create, change, move and
+delete boards, lists, notes, pages, folders and tasks. It works on the same
+data file, and the running app shows the changes within about a second.
+
+```
+bin\slateforge help
+bin\slateforge tree
+bin\slateforge createPage "Weekly report" null @C:\tmp\report.html
+bin\slateforge updateTask 12 done=true
+```
+
+It needs Node.js and a built app (`npm run build`).
 
 ## Where the data lives
 

@@ -16,6 +16,8 @@ export interface ViewProps {
   item: Item
   // Changes when data was restored from the trash, so views load again.
   version: number
+  // Changes when another program (the command line tool) changed the data.
+  externalVersion: number
   // Set when a search result asks to open a task.
   focusTask: { taskId: number } | null
   onUpdateItem: (patch: ItemPatch) => void

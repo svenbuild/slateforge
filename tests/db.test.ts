@@ -54,6 +54,8 @@ describe('migration', () => {
       expect(titles(migrated.getBoard(1).tasks)).toEqual(['Old task'])
       expect(migrated.getNote(2)).toBe('{"a":1}')
       // references still work: deleting the board forever removes its task
+      const page = migrated.createPage('New page', null, '<p>works</p>')
+      expect(migrated.getPage(page.id)).toBe('<p>works</p>')
       const folder = migrated.createItem('folder', 'New folder', null)
       migrated.setItemOrder(folder.id, [1])
       migrated.deleteItem(1, false)
@@ -315,6 +317,39 @@ describe('notes', () => {
   })
 })
 
+describe('pages', () => {
+  it('saves HTML and finds its text without the tags', () => {
+    const page = store.createPage('Weekly report', null, '<style>.x{color:red}</style><h1>Sales</h1><p>Revenue went <b>up</b></p>')
+    expect(page).toMatchObject({ type: 'page', title: 'Weekly report' })
+    expect(store.getPage(page.id)).toContain('<h1>Sales</h1>')
+    expect(store.search('revenue went up')).toMatchObject([{ itemId: page.id, snippet: { match: 'Revenue went up' } }])
+    expect(store.search('color')).toEqual([])
+    store.savePage(page.id, '<p>New text</p>')
+    expect(store.getPage(page.id)).toBe('<p>New text</p>')
+    expect(store.getStats().pages).toBe(1)
+  })
+
+  it('only saves HTML into pages', () => {
+    const note = store.createItem('note', 'N', null)
+    expect(() => store.savePage(note.id, '<p>x</p>')).toThrow()
+    const folder = store.createItem('folder', 'F', null)
+    expect(store.createPage('Inside', folder.id, '').parentId).toBe(folder.id)
+  })
+})
+
+describe('notes from Markdown', () => {
+  it('stores Markdown for the editor and plain text for the search', () => {
+    const note = store.createNote('Plan', null, '# Goals\n- ship it')
+    expect(JSON.parse(store.getNote(note.id))).toEqual({ markdown: '# Goals\n- ship it' })
+    expect(store.getNoteText(note.id)).toBe('# Goals\n- ship it')
+    expect(store.search('ship')).toHaveLength(1)
+    store.setNoteMarkdown(note.id, 'changed')
+    expect(store.getNoteText(note.id)).toBe('changed')
+    const list = store.createItem('list', 'L', null)
+    expect(() => store.setNoteMarkdown(list.id, 'x')).toThrow()
+  })
+})
+
 describe('trash', () => {
   it('hides a deleted task and restores it in its old place', () => {
     const list = store.createItem('list', 'L', null)
@@ -365,7 +400,7 @@ describe('trash', () => {
     expect(store.listTrash()).toMatchObject([{ kind: 'item', id: note.id }])
     store.emptyTrash()
     expect(store.listTrash()).toEqual([])
-    expect(store.getStats()).toEqual({ boards: 0, lists: 0, notes: 0, tasks: 0, openTasks: 0 })
+    expect(store.getStats()).toEqual({ boards: 0, lists: 0, notes: 0, pages: 0, tasks: 0, openTasks: 0 })
   })
 
   it('does not delete forever what is not in the trash', () => {
@@ -454,6 +489,6 @@ describe('settings and statistics', () => {
     store.updateTask(done.id, { done: true })
     const gone = store.createTask(list.id, null, 'C')
     store.deleteTask(gone.id)
-    expect(store.getStats()).toEqual({ boards: 1, lists: 1, notes: 1, tasks: 2, openTasks: 1 })
+    expect(store.getStats()).toEqual({ boards: 1, lists: 1, notes: 1, pages: 0, tasks: 2, openTasks: 1 })
   })
 })

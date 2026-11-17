@@ -72,8 +72,14 @@ function createWindow(): void {
   mainWindow.on('closed', () => (mainWindow = null))
 
   // The app only ever shows its own page.
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // Web links in HTML pages open in the normal browser.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url)
+    return { action: 'deny' }
+  })
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+  // Links inside an HTML page must not load websites into the app either.
+  mainWindow.webContents.on('will-frame-navigate', (event) => event.preventDefault())
 
   if (process.env.ELECTRON_RENDERER_URL) mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -81,7 +87,19 @@ function createWindow(): void {
 
 function start(): void {
   mkdirSync(app.getPath('userData'), { recursive: true })
-  const store = createStore(openDatabase(dataFile))
+  const db = openDatabase(dataFile)
+  const store = createStore(db)
+
+  // The command line tool writes to the same file. This number changes when
+  // another program has saved something, and the window then loads again.
+  const dataVersion = (): unknown => db.prepare('PRAGMA data_version').get()?.data_version
+  let seenVersion = dataVersion()
+  setInterval(() => {
+    const version = dataVersion()
+    if (version === seenVersion) return
+    seenVersion = version
+    mainWindow?.webContents.send('external-change')
+  }, 1000)
   applyTheme(store.getSettings().theme)
 
   const api: Api = {

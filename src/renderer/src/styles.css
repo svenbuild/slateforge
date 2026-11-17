@@ -622,12 +622,46 @@ kbd {
   border-top: 1px solid var(--border);
 }
 
-.sidebar-new .ghost-button {
+.sidebar-new > .ghost-button {
   flex: 1;
-  justify-content: center;
-  gap: 3px;
-  padding: 5px 2px;
+  justify-content: flex-start;
+  padding: 6px 8px;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+}
+
+.new-menu {
+  width: 228px;
+}
+
+/* ---- HTML pages ---- */
+
+.page-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.page-source {
+  flex: 1;
+  min-height: 0;
+  margin: 0 28px 28px;
+  resize: none;
+  font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.page-empty {
+  padding: 4px 28px;
 }
 
 .menu-add {

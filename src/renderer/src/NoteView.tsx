@@ -29,8 +29,12 @@ const MARKDOWN_HINT = /^(#{1,6} |[-*+] |\d+\. |> |```)|\*\*[^*]+\*\*|\[[^\]]+\]\
 
 // A note that cannot be read must fail loudly. Opening it as an empty note
 // would overwrite the stored text with the first keystroke.
-function parseNote(json: string): JSONContent | null {
-  return json === '' ? null : JSON.parse(json)
+// Notes written by the command line tool are stored as { markdown: "..." }.
+// They come back as a string and the editor formats them.
+function parseNote(json: string): JSONContent | string | null {
+  if (json === '') return null
+  const content = JSON.parse(json)
+  return typeof content.markdown === 'string' ? content.markdown : content
 }
 
 interface Tool {
@@ -78,7 +82,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent | null }) {
+function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent | string | null }) {
   // True while the editor has changes that are not in the database yet.
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
@@ -111,6 +115,7 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
       Markdown
     ],
     content: initial ?? '',
+    ...(typeof initial === 'string' ? { contentType: 'markdown' as const } : {}),
     editorProps: {
       attributes: { class: 'note-content', spellcheck: 'false' },
       // Plain Markdown text from the clipboard is turned into formatted content.
@@ -151,21 +156,27 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
   )
 }
 
-export function NoteView({ item, onUpdateItem }: ViewProps) {
-  const [content, setContent] = useState<{ itemId: number; initial: JSONContent | null } | null>(null)
+export function NoteView({ item, externalVersion, onUpdateItem }: ViewProps) {
+  // Null while the note is loading. The editor only exists with loaded content.
+  const [content, setContent] = useState<{ initial: JSONContent | string | null } | null>(null)
+
+  // Another program changed the data: close the editor first, which saves
+  // unsaved typing, and only then read the note again.
+  useEffect(() => setContent(null), [externalVersion])
 
   useEffect(() => {
+    if (content !== null) return
     let stale = false
-    api.getNote(item.id).then((json) => !stale && setContent({ itemId: item.id, initial: parseNote(json) }))
+    api.getNote(item.id).then((json) => !stale && setContent({ initial: parseNote(json) }))
     return () => {
       stale = true
     }
-  }, [item.id])
+  }, [content, item.id])
 
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {content?.itemId === item.id && <NoteEditor key={item.id} itemId={item.id} initial={content.initial} />}
+      {content && <NoteEditor itemId={item.id} initial={content.initial} />}
     </div>
   )
 }
