@@ -1,0 +1,530 @@
+import { DatabaseSync } from 'node:sqlite'
+import { makeSnippet } from '../shared/logic'
+import {
+  ITEM_TYPES,
+  PRIORITIES,
+  SORT_MODES,
+  THEMES,
+  TRASH_KINDS,
+  type Api,
+  type Column,
+  type Item,
+  type ItemType,
+  type SearchResult,
+  type Task,
+  type Theme,
+  type TrashEntry,
+  type TrashKind
+} from '../shared/types'
+
+// The part of the API that only needs the database.
+export type Store = Omit<Api, 'getDataPath' | 'showDataFolder'>
+
+type Row = Record<string, unknown>
+
+const MAX_TITLE = 500
+const MAX_TEXT = 100_000
+const MAX_NOTE = 20_000_000
+const SEARCH_LIMIT = 50
+
+const MIGRATIONS = [
+  `
+  CREATE TABLE items (
+    id INTEGER PRIMARY KEY,
+    type TEXT NOT NULL CHECK (type IN ('board', 'list', 'note')),
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL,
+    sort_mode TEXT NOT NULL DEFAULT 'manual' CHECK (sort_mode IN ('manual', 'due', 'priority')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  CREATE TABLE columns (
+    id INTEGER PRIMARY KEY,
+    board_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    deleted_at TEXT
+  );
+  CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY,
+    item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    column_id INTEGER REFERENCES columns(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+    due_date TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  CREATE TABLE notes (
+    item_id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+    content_json TEXT NOT NULL DEFAULT '',
+    content_text TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  CREATE INDEX idx_columns_board ON columns(board_id);
+  CREATE INDEX idx_tasks_item ON tasks(item_id);
+  CREATE INDEX idx_tasks_column ON tasks(column_id);
+  `
+]
+
+// A task counts as active when the task, its entry and its column are not in the trash.
+const ACTIVE_TASKS = `
+  FROM tasks t
+  JOIN items i ON i.id = t.item_id
+  LEFT JOIN columns c ON c.id = t.column_id
+  WHERE t.deleted_at IS NULL AND i.deleted_at IS NULL
+    AND (t.column_id IS NULL OR c.deleted_at IS NULL)`
+
+const TABLES: Record<TrashKind, string> = { item: 'items', column: 'columns', task: 'tasks' }
+
+export function openDatabase(file: string): DatabaseSync {
+  const db = new DatabaseSync(file)
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;')
+  // SQLite only lowercases ASCII, so search uses the JavaScript version.
+  db.function('ulower', { deterministic: true }, (value) =>
+    typeof value === 'string' ? value.toLowerCase() : value
+  )
+  migrate(db)
+  return db
+}
+
+function transaction(db: DatabaseSync, work: () => void): void {
+  db.exec('BEGIN')
+  try {
+    work()
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+function migrate(db: DatabaseSync): void {
+  const version = Number((db.prepare('PRAGMA user_version').get() as Row).user_version)
+  if (version > MIGRATIONS.length) {
+    throw new Error('This database was created by a newer version of Slateforge.')
+  }
+  for (let next = version; next < MIGRATIONS.length; next++) {
+    transaction(db, () => {
+      db.exec(MIGRATIONS[next])
+      db.exec(`PRAGMA user_version = ${next + 1}`)
+    })
+  }
+}
+
+// ---- input checks (the renderer is not trusted blindly) ----
+
+function id(value: unknown): number {
+  if (!Number.isInteger(value) || (value as number) <= 0) throw new Error('Invalid id')
+  return value as number
+}
+
+function idOrNull(value: unknown): number | null {
+  return value === null ? null : id(value)
+}
+
+function idList(value: unknown): number[] {
+  if (!Array.isArray(value) || value.length > 100_000) throw new Error('Invalid id list')
+  const ids = value.map(id)
+  if (new Set(ids).size !== ids.length) throw new Error('Duplicate ids')
+  return ids
+}
+
+function text(value: unknown, max: number): string {
+  if (typeof value !== 'string' || value.length > max) throw new Error('Invalid text')
+  return value
+}
+
+function title(value: unknown): string {
+  return text(value, MAX_TITLE).trim() || 'Untitled'
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T {
+  if (!allowed.includes(value as T)) throw new Error('Invalid value')
+  return value as T
+}
+
+function dateOrNull(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Invalid date')
+  return value
+}
+
+// ---- row mapping ----
+
+function toItem(row: Row): Item {
+  return {
+    id: row.id as number,
+    type: row.type as ItemType,
+    title: row.title as string,
+    icon: row.icon as string,
+    color: row.color as string,
+    sortMode: row.sort_mode as Item['sortMode']
+  }
+}
+
+function toColumn(row: Row): Column {
+  return { id: row.id as number, boardId: row.board_id as number, title: row.title as string }
+}
+
+function toTask(row: Row): Task {
+  return {
+    id: row.id as number,
+    itemId: row.item_id as number,
+    columnId: row.column_id as number | null,
+    title: row.title as string,
+    description: row.description as string,
+    priority: row.priority as Task['priority'],
+    dueDate: row.due_date as string | null,
+    done: row.done === 1
+  }
+}
+
+export function createStore(db: DatabaseSync): Store {
+  const now = (): string => new Date().toISOString()
+  const all = (sql: string, ...params: (string | number | null)[]): Row[] =>
+    db.prepare(sql).all(...params) as Row[]
+  const get = (sql: string, ...params: (string | number | null)[]): Row | undefined =>
+    db.prepare(sql).get(...params) as Row | undefined
+  const run = (sql: string, ...params: (string | number | null)[]): number =>
+    Number(db.prepare(sql).run(...params).lastInsertRowid)
+  const count = (sql: string, ...params: (string | number | null)[]): number =>
+    Number(get(sql, ...params)?.n ?? 0)
+
+  function nextPosition(table: string, where: string, ...params: (string | number | null)[]): number {
+    return count(`SELECT COALESCE(MAX(position), -1) + 1 AS n FROM ${table} WHERE ${where}`, ...params)
+  }
+
+  function activeItem(itemId: number): Item {
+    const row = get('SELECT * FROM items WHERE id = ? AND deleted_at IS NULL', itemId)
+    if (!row) throw new Error('Entry not found')
+    return toItem(row)
+  }
+
+  // Checks that a task container is valid: boards need one of their columns, lists need none.
+  function checkContainer(itemId: number, columnId: number | null): void {
+    const item = activeItem(itemId)
+    if (item.type === 'list' && columnId === null) return
+    if (item.type === 'board' && columnId !== null) {
+      const column = get(
+        'SELECT id FROM columns WHERE id = ? AND board_id = ? AND deleted_at IS NULL',
+        columnId,
+        itemId
+      )
+      if (column) return
+    }
+    throw new Error('Invalid task container')
+  }
+
+  function setSetting(key: string, value: string | null): void {
+    if (value === null) run('DELETE FROM settings WHERE key = ?', key)
+    else run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', key, value)
+  }
+
+  function listTasks(itemId: number): Task[] {
+    return all(`SELECT t.* ${ACTIVE_TASKS} AND t.item_id = ? ORDER BY t.position, t.id`, id(itemId)).map(toTask)
+  }
+
+  return {
+    listItems() {
+      return all('SELECT * FROM items WHERE deleted_at IS NULL ORDER BY position, id').map(toItem)
+    },
+
+    createItem(type, rawTitle) {
+      oneOf(type, ITEM_TYPES)
+      const name = title(rawTitle)
+      let itemId = 0
+      transaction(db, () => {
+        itemId = run(
+          'INSERT INTO items (type, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          type,
+          name,
+          nextPosition('items', '1 = 1'),
+          now(),
+          now()
+        )
+        if (type === 'note') run('INSERT INTO notes (item_id) VALUES (?)', itemId)
+        if (type === 'board') {
+          ;['To do', 'In progress', 'Done'].forEach((columnTitle, position) =>
+            run('INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)', itemId, columnTitle, position)
+          )
+        }
+      })
+      return activeItem(itemId)
+    },
+
+    updateItem(itemId, patch) {
+      id(itemId)
+      const changes: [string, string][] = []
+      if (patch.title !== undefined) changes.push(['title', title(patch.title)])
+      if (patch.icon !== undefined) changes.push(['icon', text(patch.icon, 50)])
+      if (patch.color !== undefined) changes.push(['color', text(patch.color, 50)])
+      if (patch.sortMode !== undefined) changes.push(['sort_mode', oneOf(patch.sortMode, SORT_MODES)])
+      changes.push(['updated_at', now()])
+      const assignments = changes.map(([column]) => `${column} = ?`).join(', ')
+      run(`UPDATE items SET ${assignments} WHERE id = ?`, ...changes.map(([, value]) => value), itemId)
+    },
+
+    setItemOrder(orderedIds) {
+      const ids = idList(orderedIds)
+      transaction(db, () => {
+        ids.forEach((itemId, position) => run('UPDATE items SET position = ? WHERE id = ?', position, itemId))
+      })
+    },
+
+    deleteItem(itemId) {
+      run('UPDATE items SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', now(), id(itemId))
+    },
+
+    getBoard(boardId) {
+      id(boardId)
+      const columns = all(
+        'SELECT * FROM columns WHERE board_id = ? AND deleted_at IS NULL ORDER BY position, id',
+        boardId
+      ).map(toColumn)
+      return { columns, tasks: listTasks(boardId) }
+    },
+
+    createColumn(boardId, rawTitle) {
+      if (activeItem(id(boardId)).type !== 'board') throw new Error('Not a board')
+      const columnId = run(
+        'INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)',
+        boardId,
+        title(rawTitle),
+        nextPosition('columns', 'board_id = ?', boardId)
+      )
+      return toColumn(get('SELECT * FROM columns WHERE id = ?', columnId) as Row)
+    },
+
+    renameColumn(columnId, rawTitle) {
+      run('UPDATE columns SET title = ? WHERE id = ?', title(rawTitle), id(columnId))
+    },
+
+    setColumnOrder(boardId, orderedIds) {
+      id(boardId)
+      const ids = idList(orderedIds)
+      transaction(db, () => {
+        ids.forEach((columnId, position) =>
+          run('UPDATE columns SET position = ? WHERE id = ? AND board_id = ?', position, columnId, boardId)
+        )
+      })
+    },
+
+    deleteColumn(columnId) {
+      run('UPDATE columns SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', now(), id(columnId))
+    },
+
+    listTasks,
+
+    createTask(itemId, columnId, rawTitle) {
+      checkContainer(id(itemId), idOrNull(columnId))
+      const taskId = run(
+        'INSERT INTO tasks (item_id, column_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        itemId,
+        columnId,
+        title(rawTitle),
+        nextPosition('tasks', 'item_id = ?', itemId),
+        now(),
+        now()
+      )
+      return toTask(get('SELECT * FROM tasks WHERE id = ?', taskId) as Row)
+    },
+
+    updateTask(taskId, patch) {
+      id(taskId)
+      const changes: [string, string | number | null][] = []
+      if (patch.title !== undefined) changes.push(['title', title(patch.title)])
+      if (patch.description !== undefined) changes.push(['description', text(patch.description, MAX_TEXT)])
+      if (patch.priority !== undefined) changes.push(['priority', oneOf(patch.priority, PRIORITIES)])
+      if (patch.dueDate !== undefined) changes.push(['due_date', dateOrNull(patch.dueDate)])
+      if (patch.done !== undefined) changes.push(['done', patch.done === true ? 1 : 0])
+      changes.push(['updated_at', now()])
+      const assignments = changes.map(([column]) => `${column} = ?`).join(', ')
+      run(`UPDATE tasks SET ${assignments} WHERE id = ?`, ...changes.map(([, value]) => value), taskId)
+    },
+
+    // Writes the complete order of one container. Tasks dragged in from another
+    // column are moved by this as well.
+    setTaskOrder(itemId, columnId, orderedIds) {
+      checkContainer(id(itemId), idOrNull(columnId))
+      const ids = idList(orderedIds)
+      transaction(db, () => {
+        ids.forEach((taskId, position) =>
+          run(
+            'UPDATE tasks SET position = ?, column_id = ? WHERE id = ? AND item_id = ?',
+            position,
+            columnId,
+            taskId,
+            itemId
+          )
+        )
+      })
+    },
+
+    deleteTask(taskId) {
+      run('UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', now(), id(taskId))
+    },
+
+    getNote(itemId) {
+      const row = get('SELECT content_json FROM notes WHERE item_id = ?', id(itemId))
+      return (row?.content_json as string | undefined) ?? ''
+    },
+
+    saveNote(itemId, contentJson, contentText) {
+      id(itemId)
+      text(contentJson, MAX_NOTE)
+      text(contentText, MAX_NOTE)
+      transaction(db, () => {
+        run('UPDATE notes SET content_json = ?, content_text = ? WHERE item_id = ?', contentJson, contentText, itemId)
+        run('UPDATE items SET updated_at = ? WHERE id = ?', now(), itemId)
+      })
+    },
+
+    search(rawQuery) {
+      const query = text(rawQuery, MAX_TITLE).trim()
+      if (query === '') return []
+      const needle = query.toLowerCase()
+      const results: SearchResult[] = []
+
+      const items = all(
+        `SELECT i.id, i.type, i.title, COALESCE(n.content_text, '') AS body
+         FROM items i LEFT JOIN notes n ON n.item_id = i.id
+         WHERE i.deleted_at IS NULL
+           AND (instr(ulower(i.title), ?) > 0 OR instr(ulower(COALESCE(n.content_text, '')), ?) > 0)
+         ORDER BY instr(ulower(i.title), ?) = 0, i.position, i.id
+         LIMIT ?`,
+        needle,
+        needle,
+        needle,
+        SEARCH_LIMIT
+      )
+      for (const row of items) {
+        const body = row.body as string
+        results.push({
+          kind: 'item',
+          itemId: row.id as number,
+          itemType: row.type as ItemType,
+          itemTitle: row.title as string,
+          taskId: null,
+          title: row.title as string,
+          snippet: body.toLowerCase().includes(needle) ? makeSnippet(body, query) : null
+        })
+      }
+
+      const tasks = all(
+        `SELECT t.id, t.title, t.description, i.id AS item_id, i.type, i.title AS item_title
+         ${ACTIVE_TASKS}
+           AND (instr(ulower(t.title), ?) > 0 OR instr(ulower(t.description), ?) > 0)
+         ORDER BY instr(ulower(t.title), ?) = 0, t.updated_at DESC
+         LIMIT ?`,
+        needle,
+        needle,
+        needle,
+        SEARCH_LIMIT
+      )
+      for (const row of tasks) {
+        const description = row.description as string
+        results.push({
+          kind: 'task',
+          itemId: row.item_id as number,
+          itemType: row.type as ItemType,
+          itemTitle: row.item_title as string,
+          taskId: row.id as number,
+          title: row.title as string,
+          snippet: description.toLowerCase().includes(needle) ? makeSnippet(description, query) : null
+        })
+      }
+      return results.slice(0, SEARCH_LIMIT)
+    },
+
+    // The trash only shows things whose parents still exist. Things below a
+    // trashed parent come back together with that parent.
+    listTrash() {
+      const rows = all(
+        `SELECT 'item' AS kind, id, title, type AS context, deleted_at FROM items
+         WHERE deleted_at IS NOT NULL
+         UNION ALL
+         SELECT 'column', c.id, c.title, i.title, c.deleted_at
+         FROM columns c JOIN items i ON i.id = c.board_id
+         WHERE c.deleted_at IS NOT NULL AND i.deleted_at IS NULL
+         UNION ALL
+         SELECT 'task', t.id, t.title, i.title, t.deleted_at
+         FROM tasks t JOIN items i ON i.id = t.item_id LEFT JOIN columns c ON c.id = t.column_id
+         WHERE t.deleted_at IS NOT NULL AND i.deleted_at IS NULL
+           AND (t.column_id IS NULL OR c.deleted_at IS NULL)
+         ORDER BY deleted_at DESC`
+      )
+      return rows.map(
+        (row): TrashEntry => ({
+          kind: row.kind as TrashKind,
+          id: row.id as number,
+          title: row.title as string,
+          context: row.context as string,
+          deletedAt: row.deleted_at as string
+        })
+      )
+    },
+
+    // Puts a trashed row back at the end of its container. Does nothing if the row is gone.
+    restore(kind, rowId) {
+      oneOf(kind, TRASH_KINDS)
+      const row = get(`SELECT * FROM ${TABLES[kind]} WHERE id = ? AND deleted_at IS NOT NULL`, id(rowId))
+      if (!row) return
+      let position = 0
+      if (kind === 'item') position = nextPosition('items', 'deleted_at IS NULL')
+      else if (kind === 'column') position = nextPosition('columns', 'board_id = ?', row.board_id as number)
+      else position = nextPosition('tasks', 'item_id = ?', row.item_id as number)
+      run(`UPDATE ${TABLES[kind]} SET deleted_at = NULL, position = ? WHERE id = ?`, position, rowId)
+    },
+
+    purge(kind, rowId) {
+      oneOf(kind, TRASH_KINDS)
+      run(`DELETE FROM ${TABLES[kind]} WHERE id = ? AND deleted_at IS NOT NULL`, id(rowId))
+    },
+
+    emptyTrash() {
+      transaction(db, () => {
+        for (const table of Object.values(TABLES)) db.exec(`DELETE FROM ${table} WHERE deleted_at IS NOT NULL`)
+      })
+    },
+
+    getSettings() {
+      const values = new Map(all('SELECT key, value FROM settings').map((row) => [row.key, row.value]))
+      const theme = THEMES.includes(values.get('theme') as Theme) ? (values.get('theme') as Theme) : 'system'
+      const lastId = Number(values.get('lastItemId'))
+      const lastItem = get('SELECT id FROM items WHERE id = ? AND deleted_at IS NULL', lastId || 0)
+      return { theme, lastItemId: lastItem ? lastId : null }
+    },
+
+    setTheme(theme) {
+      setSetting('theme', oneOf(theme, THEMES))
+    },
+
+    setLastItem(itemId) {
+      const value = idOrNull(itemId)
+      setSetting('lastItemId', value === null ? null : String(value))
+    },
+
+    getStats() {
+      const byType = (type: ItemType): number =>
+        count('SELECT COUNT(*) AS n FROM items WHERE type = ? AND deleted_at IS NULL', type)
+      return {
+        boards: byType('board'),
+        lists: byType('list'),
+        notes: byType('note'),
+        tasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS}`),
+        openTasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS} AND t.done = 0`)
+      }
+    }
+  }
+}
