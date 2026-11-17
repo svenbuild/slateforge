@@ -34,10 +34,10 @@ Look around
 Pages (HTML, for summaries, overviews, reports and results)
   createPage <title> <folderId|null> <html>  usually with @file for the HTML
   savePage <pageId> <html>                   replace the HTML
-  Write plain HTML with inline CSS. Scripts and files from the internet do not
-  run. These colors follow the theme of the app: var(--bg) var(--surface)
-  var(--border) var(--text) var(--muted) var(--accent). Text, links and tables
-  are already styled.
+  Write only the body: Slateforge adds the house style by itself. Build the
+  page from the parts shown in assets\\page-style.html of the Slateforge
+  project (h1 with <em>, .chips, .stats, .bars, table, .cols, .note).
+  Scripts and files from the internet do not run.
 
 Notes (Markdown)
   createNote <title> <folderId|null> <markdown>
@@ -45,7 +45,7 @@ Notes (Markdown)
 
 Boards, lists, folders
   createItem <board|list|note|page|folder> <title> <folderId|null>
-  updateItem <id> title=... icon=... color=... sortMode=manual|due|priority collapsed=true|false
+  updateItem <id> title=... icon=... color=... sortMode=manual|due|priority collapsed=true|false pinned=true|false
   setItemOrder <folderId|null> <[ids]>       put these items into the folder in this order
   createColumn <boardId> <title>
   renameColumn <columnId> <title>

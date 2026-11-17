@@ -18,7 +18,7 @@ import {
 } from '../shared/types'
 
 // The part of the API that only needs the database.
-export type Store = Omit<Api, 'getDataPath' | 'showDataFolder'>
+export type Store = Omit<Api, 'getDataPath' | 'showDataFolder' | 'openInBrowser'>
 
 type Row = Record<string, unknown>
 
@@ -142,6 +142,18 @@ export const MIGRATIONS = [
     html TEXT NOT NULL DEFAULT '',
     content_text TEXT NOT NULL DEFAULT ''
   );
+  `,
+  // Version 4: pinned entries. The view is made again so it has the new column.
+  `
+  ALTER TABLE items ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+  DROP VIEW live_items;
+  CREATE VIEW live_items AS
+    WITH RECURSIVE live(id) AS (
+      SELECT id FROM items WHERE parent_id IS NULL AND deleted_at IS NULL
+      UNION ALL
+      SELECT i.id FROM items i JOIN live ON i.parent_id = live.id WHERE i.deleted_at IS NULL
+    )
+    SELECT items.* FROM items JOIN live ON live.id = items.id;
   `
 ]
 
@@ -256,7 +268,8 @@ function toItem(row: Row): Item {
     icon: row.icon as string,
     color: row.color as string,
     sortMode: row.sort_mode as Item['sortMode'],
-    collapsed: row.collapsed === 1
+    collapsed: row.collapsed === 1,
+    pinned: row.pinned === 1
   }
 }
 
@@ -372,6 +385,7 @@ export function createStore(db: DatabaseSync): Store {
       if (patch.color !== undefined) changes.push(['color', text(patch.color, 50)])
       if (patch.sortMode !== undefined) changes.push(['sort_mode', oneOf(patch.sortMode, SORT_MODES)])
       if (patch.collapsed !== undefined) changes.push(['collapsed', patch.collapsed === true ? 1 : 0])
+      if (patch.pinned !== undefined) changes.push(['pinned', patch.pinned === true ? 1 : 0])
       changes.push(['updated_at', now()])
       updateRow('items', itemId, changes)
     },

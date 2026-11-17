@@ -90,8 +90,12 @@ export function App() {
     () =>
       api.onExternalChange(() => {
         api.getSettings().then((settings) => applyTheme(settings.theme))
-        api.listItems().then(setItems)
-        setVersion((current) => current + 1)
+        // Items and views change together, so a view of a deleted entry closes
+        // before it would try to load again.
+        api.listItems().then((loaded) => {
+          setItems(loaded)
+          setVersion((current) => current + 1)
+        })
       }),
     []
   )

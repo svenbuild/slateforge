@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { moveId, reorderSubset, sortTasks } from '../../shared/logic'
 import type { SortMode, Task } from '../../shared/types'
 import { api } from './api'
+import { listBody } from './export'
 import { TaskPanel } from './TaskPanel'
 import { Checkbox, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
@@ -60,12 +61,17 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted, on
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showDone, setShowDone] = useState(true)
   const [newTitle, setNewTitle] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const { update, remove } = useTaskActions(setTasks, onDeleted, onTasksChanged)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   useEffect(() => {
     let stale = false
-    api.listTasks(item.id).then((loaded) => !stale && setTasks(loaded))
+    api.listTasks(item.id).then((loaded) => {
+      if (stale) return
+      setTasks(loaded)
+      setLoaded(true)
+    })
     return () => {
       stale = true
     }
@@ -115,7 +121,7 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted, on
   return (
     <div className="view-with-panel">
       <div className="view">
-        <ViewHeader item={item} onUpdateItem={onUpdateItem}>
+        <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={loaded ? () => listBody(item.title, open, done) : null}>
           <label className="sort-select">
             Sort
             <select value={item.sortMode} onChange={(event) => onUpdateItem({ sortMode: event.target.value as SortMode })}>

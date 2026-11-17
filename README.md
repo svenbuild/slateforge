@@ -26,7 +26,11 @@ computer: no cloud, no account.
 - **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
   button brings back the last deleted thing.
 - **Pages** hold free HTML, for summaries, overviews and reports. You can
-  edit the HTML in the app.
+  edit the HTML in the app. All pages share one house style, defined in
+  `assets/page-style.html`.
+- **Open in browser**: a small button in the header opens any board, list,
+  note or page as an HTML file in your browser.
+- **Pin** entries to keep them at the top of the sidebar.
 - **Command line tool** for scripts and AI agents, see below.
 - **Own title bar** with the search in the middle.
 - **Settings**: light, dark, black or system design, statistics and the location of

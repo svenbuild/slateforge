@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import iconPath from '../../build/icon.ico?asset'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
@@ -117,7 +117,20 @@ function start(): void {
       applyTheme(next)
     },
     getDataPath: () => dataFile,
-    showDataFolder: () => shell.showItemInFolder(dataFile)
+    showDataFolder: () => shell.showItemInFolder(dataFile),
+    openInBrowser(title, html) {
+      if (typeof title !== 'string' || typeof html !== 'string') throw new Error('Invalid page')
+      // One file per title, in a folder next to the data file.
+      const folder = join(app.getPath('userData'), 'browser')
+      mkdirSync(folder, { recursive: true })
+      // The fixed start keeps names like CON or NUL from being a Windows device.
+      const name = title.replace(/[^\p{L}\p{M}\p{N} _-]+/gu, '_').trim().slice(0, 60)
+      const file = join(folder, `slateforge ${name}.html`)
+      writeFileSync(file, html)
+      shell.openPath(file).then((problem) => {
+        if (problem) dialog.showErrorBox('The page could not be opened in the browser', problem)
+      })
+    }
   }
 
   // Only the app window may use the API.

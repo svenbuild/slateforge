@@ -104,7 +104,8 @@ describe('sidebar tree', () => {
     icon: '',
     color: '',
     sortMode: 'manual',
-    collapsed
+    collapsed,
+    pinned: false
   })
   // 1 folder          4 folder (collapsed)     7 list
   //   2 list            5 list

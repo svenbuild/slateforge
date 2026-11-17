@@ -17,6 +17,8 @@ import {
   LayoutDashboard,
   ListFilter,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   Settings,
   Trash2
@@ -77,6 +79,12 @@ function ItemMenu(props: {
         <Pencil size={14} />
         Rename
       </button>
+      {item.type !== 'folder' && (
+        <button type="button" className="menu-row" onClick={() => props.onUpdate({ pinned: !item.pinned })}>
+          {item.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+          {item.pinned ? 'Unpin' : 'Pin to top'}
+        </button>
+      )}
       {item.type === 'folder' && (
         <>
           <div className="menu-label">Add to this folder</div>
@@ -362,6 +370,24 @@ export function Sidebar(props: {
         onDragCancel={onDragCancel}
       >
         <ul className="sidebar-items">
+          {needle === '' &&
+            items
+              .filter((item) => item.pinned && item.type !== 'folder')
+              .map((item) => (
+                <li
+                  key={item.id}
+                  className={`sidebar-row pinned ${props.activeId === item.id ? 'active' : ''}`}
+                  onClick={() => props.onOpen(item.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    openMenu(item, event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <RowContent item={item} openTasks={openTasks(item)} />
+                  <Pin size={12} className="pin-mark" />
+                </li>
+              ))}
+          {needle === '' && items.some((item) => item.pinned && item.type !== 'folder') && <li className="sidebar-divider" />}
           {rows.map(({ item, depth }) => (
             <SidebarRow
               key={item.id}
