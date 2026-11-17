@@ -50,7 +50,7 @@ describe('migration', () => {
       const db = openDatabase(file)
       const migrated = createStore(db)
       expect(titles(migrated.listItems())).toEqual(['Old board', 'Old note'])
-      expect(migrated.listItems()[0]).toMatchObject({ parentId: null, collapsed: false })
+      expect(migrated.listItems()[0]).toMatchObject({ parentId: null, collapsed: false, pinned: false })
       expect(titles(migrated.getBoard(1).tasks)).toEqual(['Old task'])
       expect(migrated.getNote(2)).toBe('{"a":1}')
       // references still work: deleting the board forever removes its task
@@ -109,6 +109,13 @@ describe('folders', () => {
     expect(() => store.setItemOrder(outer.id, [list.id])).toThrow()
     store.restore('item', list.id)
     expect(store.listItems().find((item) => item.id === outer.id)?.parentId).toBeNull()
+  })
+
+  it('remembers pinned entries', () => {
+    const list = store.createItem('list', 'L', null)
+    expect(list.pinned).toBe(false)
+    store.updateItem(list.id, { pinned: true })
+    expect(store.listItems()[0].pinned).toBe(true)
   })
 
   it('remembers if a folder is collapsed', () => {

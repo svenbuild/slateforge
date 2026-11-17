@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import iconPath from '../../build/icon.ico?asset'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
@@ -117,7 +117,17 @@ function start(): void {
       applyTheme(next)
     },
     getDataPath: () => dataFile,
-    showDataFolder: () => shell.showItemInFolder(dataFile)
+    showDataFolder: () => shell.showItemInFolder(dataFile),
+    openInBrowser(title, html) {
+      if (typeof title !== 'string' || typeof html !== 'string') throw new Error('Invalid page')
+      // One file per title, in a folder next to the data file.
+      const folder = join(app.getPath('userData'), 'browser')
+      mkdirSync(folder, { recursive: true })
+      const name = title.replace(/[^\p{L}\p{N} _-]+/gu, '_').trim().slice(0, 60) || 'page'
+      const file = join(folder, `${name}.html`)
+      writeFileSync(file, html)
+      shell.openPath(file)
+    }
   }
 
   // Only the app window may use the API.

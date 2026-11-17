@@ -3,7 +3,7 @@
 // script stops with an error when something does not behave as expected.
 // Run `npm run build` first, then `npm run screenshots`.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -386,15 +386,20 @@ try {
   const reportFile = join(dataDir, 'report.html')
   writeFileSync(
     reportFile,
-    `<h1>Weekly summary</h1>
-<p style="color: var(--muted)">Written by an agent through the command line tool.</p>
-<div style="display: flex; gap: 12px">
-  <div style="flex: 1; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px">
-    <div style="font-size: 26px; font-weight: 600">7</div>open tasks</div>
-  <div style="flex: 1; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px">
-    <div style="font-size: 26px; font-weight: 600; color: var(--accent)">2</div>done this week</div>
+    `<div class="chips"><span class="chip accent">Weekly</span><span class="chip">2 projects</span></div>
+<h1>Weekly summary: <em>7 tasks</em> still open</h1>
+<p>Written by an agent through the command line tool.</p>
+<div class="stats">
+  <div class="stat"><b>7</b><span>open tasks</span></div>
+  <div class="stat accent"><b>2</b><span>done this week</span></div>
+  <div class="stat bad"><b>1</b><span>overdue</span></div>
 </div>
-<h2>Results</h2>
+<h2>Open tasks <em>per entry</em></h2>
+<div class="bars">
+  <div class="bar"><b>Website relaunch<small>board</small></b><div><i style="width:80%">4</i></div><span>4</span></div>
+  <div class="bar"><b>Shopping<small>list</small></b><div><i class="wait" style="width:40%"><span>2</span></i></div><span>2</span></div>
+</div>
+<h3>Results</h3>
 <table><tr><th>Topic</th><th>State</th></tr><tr><td>Landing page</td><td>in progress</td></tr><tr><td>Zebra stripes</td><td>done</td></tr></table>
 <p><a href="https://example.com">A link that must not leave the app</a></p>
 <script>document.body.innerHTML = 'SCRIPT RAN'</script>`
@@ -405,7 +410,7 @@ try {
   await row('Agent report').click()
   const frame = page.frameLocator('.page-frame')
   await frame.locator('h1').waitFor()
-  check((await frame.locator('h1').innerText()) === 'Weekly summary', 'the page shows its HTML')
+  check((await frame.locator('h1').innerText()).startsWith('WEEKLY SUMMARY'), 'the page shows its HTML in the house style')
   check(!(await frame.locator('body').innerText()).includes('SCRIPT RAN'), 'scripts inside a page do not run')
   // Catch the call that would open the real browser during this test.
   await app.evaluate(({ shell }) => {
@@ -450,6 +455,50 @@ try {
   await row('Agent note').waitFor({ state: 'detached' })
   check(true, 'an entry deleted by the tool leaves the sidebar')
   check(cli('tree').includes('page  Agent report'), 'the tool lists everything with ids')
+
+  // ---- open in browser, for every kind of entry ----
+  // Catch the call that would open the real browser during this test.
+  await app.evaluate(({ shell }) => {
+    shell.openPath = async (path) => {
+      globalThis.openedPath = path
+      return ''
+    }
+  })
+  const openInBrowser = async (title) => {
+    await row(title).click()
+    await page.locator('.view-header button[title="Open in browser"]').click()
+    await page.waitForFunction(() => true)
+    await page.waitForTimeout(300)
+    return readFileSync(await app.evaluate(() => globalThis.openedPath), 'utf8')
+  }
+  const pageFile = await openInBrowser('Agent report')
+  check(pageFile.includes('Changed by hand') && pageFile.includes('Content-Security-Policy'), 'a page opens in the browser as a locked HTML file')
+  const boardFile = await openInBrowser('Website relaunch')
+  check(boardFile.includes('class="col"') && boardFile.includes('Write landing page text'), 'a board opens in the browser with its columns and tasks')
+  const listFile = await openInBrowser('Shopping')
+  check(listFile.includes('Garden soil') && listFile.includes('Completed'), 'a list opens in the browser with open and completed tasks')
+  const noteFile = await openInBrowser('Garden ideas')
+  check(noteFile.includes('class="prose"') && noteFile.includes('Spring plan'), 'a note opens in the browser with its formatted text')
+
+  // ---- pinning ----
+  await row('Shopping').click({ button: 'right' })
+  await page.locator('.menu-row', { hasText: 'Pin to top' }).click()
+  await page.keyboard.press('Escape')
+  await page.locator('.sidebar-row.pinned', { hasText: 'Shopping' }).waitFor()
+  check((await texts('.sidebar-row .sidebar-title'))[0] === 'Shopping', 'a pinned entry is listed at the top of the sidebar')
+  cli('updateItem', String(created.id), 'pinned=true')
+  await page.locator('.sidebar-row.pinned', { hasText: 'Agent report' }).waitFor()
+  check(true, 'the tool can pin entries too')
+  await shot('pinned-dark')
+  await page.locator('.sidebar-row.pinned', { hasText: 'Agent report' }).click()
+  await frame.locator('h1').waitFor()
+  await shot('page-house-style')
+  await page.locator('.sidebar-row.pinned', { hasText: 'Shopping' }).click({ button: 'right' })
+  await page.locator('.menu-row', { hasText: 'Unpin' }).click()
+  await page.keyboard.press('Escape')
+  cli('updateItem', String(created.id), 'pinned=false')
+  await page.locator('.sidebar-row.pinned').first().waitFor({ state: 'detached' })
+  check((await page.locator('.sidebar-row.pinned').count()) === 0, 'unpinning removes it from the top')
   cli('deleteItem', String(created.id), 'false')
   await row('Agent report').waitFor({ state: 'detached' })
 

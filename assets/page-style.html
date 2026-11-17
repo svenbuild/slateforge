@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page style</title>
+<!--
+  House style for HTML pages (summaries, overviews, reports, results).
+  Copy the style block into a new page and build the body from the parts
+  shown below. Slateforge adds this style to its pages by itself, so a page
+  made for Slateforge only needs the body.
+  Rules: black page, white text, one amber accent. Very large condensed
+  upper-case headlines, small calm text. Numbers in a mono font. No shadows,
+  no rounded cards, no gradients, no emoji, no scripts, no files from the web.
+-->
+<style>
+:root {
+  --bg: #000000;
+  --text: #ffffff;
+  --soft: #d6d6d6;
+  --muted: #8c8c8c;
+  --line: #2b2b2b;
+  --accent: #f5a524;
+  --bad: #ef4444;
+  --good: #4ade80;
+  --display: 'Bahnschrift', 'Arial Narrow', 'Segoe UI', sans-serif;
+  --body: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 56px 48px 96px;
+  background: var(--bg);
+  color: var(--soft);
+  font: 15px/1.5 var(--body);
+}
+
+/* Headlines: condensed, heavy, upper case. Mark the key words with <em>. */
+h1, h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+h1 { font-size: clamp(56px, 9vw, 112px); line-height: 0.92; }
+h2 { font-size: clamp(34px, 4.6vw, 52px); line-height: 1; margin-top: 88px; }
+h1 em, h2 em { font-style: normal; color: var(--accent); }
+h3 { margin: 40px 0 0; color: var(--text); font-size: 19px; font-weight: 700; }
+
+p { margin: 14px 0 0; max-width: 620px; }
+h1 + p { margin-top: 24px; }
+.chips + h1 { margin-top: 22px; }
+.chips:first-child { margin-top: 0; }
+strong, b { color: var(--text); }
+a { color: var(--text); text-underline-offset: 3px; }
+hr { margin: 40px 0; border: none; border-top: 1px solid var(--line); }
+code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
+pre { margin: 20px 0 0; padding: 14px 16px; border: 1px solid var(--line); overflow-x: auto; }
+ul, ol { margin: 14px 0 0; padding-left: 22px; max-width: 620px; }
+li + li { margin-top: 4px; }
+.note { color: var(--muted); font-size: 13px; }
+.bad { color: var(--bad); }
+.good { color: var(--good); }
+.accent { color: var(--accent); }
+
+/* Chips: small labels, tabs or states. "on" is the selected one. */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.chip {
+  padding: 6px 11px;
+  border: 1px solid #3d3d3d;
+  color: var(--soft);
+  font: 700 11px/1.3 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chip.on { background: var(--text); border-color: var(--text); color: #000; }
+.chip.accent { background: var(--accent); border-color: var(--accent); color: #000; }
+
+/* Stat tiles: one big number each, a short label below. */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 28px; }
+.stat { padding: 22px 22px 20px; border: 1px solid var(--line); }
+.stat b { display: block; font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+.stat span { display: block; margin-top: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.stat.bad b { color: var(--bad); }
+.stat.accent b { color: var(--accent); }
+
+/* Bar rows: label, bar, value. Give each <i> its width in percent.
+   Plain = white, "wait" = amber stripes, "open" = outline only. */
+.bars { margin-top: 28px; border-top: 1px solid var(--line); }
+.bar { display: grid; grid-template-columns: 190px 1fr 78px; align-items: center; gap: 0 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.bar > b { font: 700 21px/1.05 var(--display); font-stretch: 75%; text-transform: uppercase; }
+.bar > b small { display: block; margin-top: 3px; color: var(--muted); font: 400 10.5px/1.3 var(--mono); text-transform: none; }
+.bar > div { display: flex; height: 28px; }
+.bar i {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  padding-right: 6px;
+  background: var(--text);
+  color: #000;
+  font: 700 10.5px/1 var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.bar i.wait { background: repeating-linear-gradient(135deg, var(--accent) 0 7px, #000 7px 13px); }
+.bar i.wait span { padding: 2px 4px; background: var(--accent); }
+.bar i.open { background: none; border: 1px solid var(--text); color: var(--text); }
+.bar i.accent { background: var(--accent); }
+.bar i.bad { background: var(--bad); }
+.bar > span { color: var(--text); font: 700 13px/1 var(--mono); text-align: right; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 14px; color: var(--soft); font-size: 12.5px; }
+.legend i { display: inline-block; width: 22px; height: 10px; margin-right: 7px; background: var(--text); vertical-align: -1px; }
+.legend i.wait { background: repeating-linear-gradient(135deg, var(--accent) 0 4px, #000 4px 8px); }
+.legend i.open { background: none; border: 1px solid var(--text); }
+
+/* Tables: thin lines, numbers right aligned with class "num". */
+table { width: 100%; margin-top: 24px; border-collapse: collapse; }
+th, td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-size: 13px; font-weight: 400; }
+td { color: var(--text); }
+.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* Columns of cards, for boards and side by side comparisons. */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 28px; align-items: start; }
+.col { border: 1px solid var(--line); padding: 14px; }
+.col > b { display: block; margin-bottom: 10px; font: 700 12px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.card { padding: 10px 0; border-top: 1px solid var(--line); color: var(--text); }
+.card small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.done { color: var(--muted); text-decoration: line-through; }
+
+/* Long text, for example a note: headlines stay small here. */
+.prose { max-width: 720px; }
+.prose h1, .prose h2 { margin: 32px 0 0; font: 700 24px/1.25 var(--body); text-transform: none; letter-spacing: 0; }
+.prose h2 { font-size: 20px; }
+.prose blockquote { margin: 14px 0 0; padding-left: 14px; border-left: 2px solid var(--line); color: var(--muted); }
+.prose ul[data-type='taskList'] { list-style: none; padding-left: 0; }
+.prose ul[data-type='taskList'] li { display: flex; gap: 8px; }
+.prose ul[data-type='taskList'] li p { margin: 0; }
+.prose ul[data-type='taskList'] label { pointer-events: none; }
+
+@media (max-width: 700px) {
+  body { padding: 32px 20px 64px; }
+  .bar { grid-template-columns: 1fr 70px; }
+  .bar > b { grid-column: 1 / -1; margin-bottom: 6px; }
+}
+</style>
+</head>
+<body>
+
+<div class="chips"><span class="chip accent">Review</span><span class="chip">4 models</span><span class="chip">9 rounds</span></div>
+
+<h1>Same review. Carbon takes <em>5 times</em> as long.</h1>
+<p>9 review rounds. In each round, four models got the same read-only brief at the same time. Carbon finished 4 of them, in 16:44 on average.</p>
+
+<div class="stats">
+  <div class="stat"><b>100%</b><span>Claude full hits (228 of 228 turns)</span></div>
+  <div class="stat"><b>100%</b><span>GPT full hits (228 of 228 turns)</span></div>
+  <div class="stat bad"><b>73%</b><span>Gemini full hits (167 of 228 turns)</span></div>
+  <div class="stat accent"><b>1.48x</b><span>Gemini cost at a 120 s gap</span></div>
+</div>
+
+<h2>Time for <em>one step</em></h2>
+<p>One step is one model response and the tool calls it makes.</p>
+<div class="bars">
+  <div class="bar"><b>Gemini 4 Carbon<small>Antigravity, this thread</small></b><div><i class="wait" style="width:47%"><span>11.3 s</span></i><i style="width:40%">9.5 s</i><i class="open" style="width:4%"></i></div><span>21.6 s</span></div>
+  <div class="bar"><b>Opus 5.5<small>Claude Code, all work</small></b><div><i class="wait" style="width:10%"><span>2.3 s</span></i><i style="width:26%">6.3 s</i><i class="open" style="width:19%">4.6 s</i></div><span>13.2 s</span></div>
+  <div class="bar"><b>Fable 5.2<small>Claude Code, all work</small></b><div><i class="wait" style="width:2%"></i><i style="width:47%">11.3 s</i><i class="open" style="width:26%">6.2 s</i></div><span>18.0 s</span></div>
+  <div class="bar"><b>GPT-6.1 Sol<small>Codex, all work</small></b><div><i class="wait" style="width:15%"><span>3.7 s</span></i><i style="width:37%">8.9 s</i><i class="open" style="width:4%"></i></div><span>13.5 s</span></div>
+</div>
+<div class="legend"><span><i class="wait"></i>waits for the answer to start</span><span><i></i>model writes</span><span><i class="open"></i>tools run</span></div>
+
+<h3>Which review did the judges prefer?</h3>
+<p>The judges saw anonymized reviews and the brief. They could not inspect the code.</p>
+<table>
+  <tr><th>Judge</th><th class="num">Opus preferred</th><th class="num">Sol preferred</th><th class="num">Tie</th></tr>
+  <tr><td>Opus judge</td><td class="num">66/83</td><td class="num">10/83</td><td class="num">7/83</td></tr>
+  <tr><td>Sol judge</td><td class="num">54/83</td><td class="num">17/83</td><td class="num">12/83</td></tr>
+</table>
+<p class="note">Writing style, amount of detail and different budgets may affect preference.</p>
+
+<h3>Board as columns</h3>
+<div class="cols">
+  <div class="col"><b>To do</b><div class="card">Write landing page text<small>High, due Nov 20</small></div><div class="card">Plan newsletter</div></div>
+  <div class="col"><b>In progress</b><div class="card">Design new logo</div></div>
+  <div class="col"><b>Done</b><div class="card done">Choose color palette</div></div>
+</div>
+
+</body>
+</html>

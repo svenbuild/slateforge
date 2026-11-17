@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { moveId, reorderSubset, sortTasks } from '../../shared/logic'
 import type { SortMode, Task } from '../../shared/types'
 import { api } from './api'
+import { listBody } from './export'
 import { TaskPanel } from './TaskPanel'
 import { Checkbox, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
@@ -115,7 +116,7 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted, on
   return (
     <div className="view-with-panel">
       <div className="view">
-        <ViewHeader item={item} onUpdateItem={onUpdateItem}>
+        <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={() => listBody(item.title, open, done)}>
           <label className="sort-select">
             Sort
             <select value={item.sortMode} onChange={(event) => onUpdateItem({ sortMode: event.target.value as SortMode })}>

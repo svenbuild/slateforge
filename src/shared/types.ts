@@ -25,6 +25,8 @@ export interface Item {
   sortMode: SortMode
   // Only used by folders: hides the content in the sidebar.
   collapsed: boolean
+  // Pinned entries are also listed at the top of the sidebar.
+  pinned: boolean
 }
 
 export interface Column {
@@ -55,6 +57,7 @@ export interface ItemPatch {
   color?: string
   sortMode?: SortMode
   collapsed?: boolean
+  pinned?: boolean
 }
 
 export interface TaskPatch {
@@ -162,6 +165,8 @@ export interface Api {
 
   getDataPath(): string
   showDataFolder(): void
+  // Writes the HTML to a file and opens it in the normal browser.
+  openInBrowser(title: string, html: string): void
 }
 
 export const API_METHODS = [
@@ -200,7 +205,8 @@ export const API_METHODS = [
   'setLastItem',
   'getStats',
   'getDataPath',
-  'showDataFolder'
+  'showDataFolder',
+  'openInBrowser'
 ] as const satisfies readonly (keyof Api)[]
 
 // The renderer sees every method as async, plus one sync call used while the window closes.

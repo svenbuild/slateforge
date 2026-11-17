@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { noteBody } from './export'
 import { ViewHeader, type ViewProps } from './ui'
 
 const SAVE_DELAY_MS = 400
@@ -82,7 +83,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor(props: { itemId: number; json: string; version: number }) {
+function NoteEditor(props: { itemId: number; json: string; version: number; htmlRef: { current: () => string } }) {
   const { itemId } = props
   const initial = parseNote(props.json)
   // What the database holds, as far as this editor knows.
@@ -140,6 +141,7 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
     }
   })
   editorRef.current = editor
+  props.htmlRef.current = () => editor.getHTML()
 
   // The data changed somewhere. Only when it was this note, and the
   // user is not in the middle of typing, the new text replaces the old one.
@@ -184,6 +186,8 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
 export function NoteView({ item, version, onUpdateItem }: ViewProps) {
   // Null while the note is loading. The editor only exists with loaded content.
   const [json, setJson] = useState<string | null>(null)
+  // The editor fills this in, so the header button can ask for the note as HTML.
+  const htmlRef = useRef<() => string>(() => '')
 
   useEffect(() => {
     let stale = false
@@ -195,8 +199,8 @@ export function NoteView({ item, version, onUpdateItem }: ViewProps) {
 
   return (
     <div className="view">
-      <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {json !== null && <NoteEditor itemId={item.id} json={json} version={version} />}
+      <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={() => noteBody(item.title, htmlRef.current())} />
+      {json !== null && <NoteEditor itemId={item.id} json={json} version={version} htmlRef={htmlRef} />}
     </div>
   )
 }

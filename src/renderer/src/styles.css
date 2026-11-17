@@ -580,6 +580,18 @@ kbd {
   display: none;
 }
 
+.pin-mark {
+  flex-shrink: 0;
+  margin-right: 6px;
+  color: var(--text-faint);
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
 .sidebar-end {
   height: 18px;
 }

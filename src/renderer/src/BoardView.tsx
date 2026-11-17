@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { moveId, placeRow } from '../../shared/logic'
 import type { Column, Task } from '../../shared/types'
 import { api } from './api'
+import { boardBody } from './export'
 import { TaskPanel } from './TaskPanel'
 import { Checkbox, InlineEdit, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
@@ -255,7 +256,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted, o
   return (
     <div className="view-with-panel">
       <div className="view">
-        <ViewHeader item={item} onUpdateItem={onUpdateItem} />
+        <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={() => boardBody(item.title, columns, tasks)} />
         <div className="view-body board-body">
           <DndContext
             sensors={sensors}
