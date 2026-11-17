@@ -35,6 +35,7 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
       const [loaded, viewBase] = await Promise.all([api.getFileInfo(item.id), getViewBase()])
       setInfo(loaded)
       setBase(viewBase)
+      setProblem('')
       if (!loaded.exists || loaded.kind !== 'markdown') return
       const markdown = await api.readFileText(item.id)
       if (!stale) setText((current) => current ?? markdown)

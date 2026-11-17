@@ -173,16 +173,21 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
   useEffect(() => {
     let stale = false
     const before = stored.current
-    source.load().then((json) => {
-      // A save that happened while waiting makes this answer outdated.
-      if (stale || dirty.current || stored.current !== before || json === before) return
-      stored.current = json
-      const content = source.parse(json)
-      editor.commands.setContent(content ?? '', {
-        emitUpdate: false,
-        ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+    source
+      .load()
+      .then((json) => {
+        // A save that happened while waiting makes this answer outdated.
+        if (stale || dirty.current || stored.current !== before || json === before) return
+        stored.current = json
+        const content = source.parse(json)
+        editor.commands.setContent(content ?? '', {
+          emitUpdate: false,
+          ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+        })
       })
-    })
+      // A text that cannot be read right now keeps what the editor shows. The
+      // error must not count as a failed call, which would only load again.
+      .catch(() => {})
     return () => {
       stale = true
     }

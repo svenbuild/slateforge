@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -91,6 +91,26 @@ describe('reading and writing', () => {
     expect(readForEditor(file('marked.md'))).toBe('# Title')
     writeText(file('marked.md'), '# New title', '# Title')
     expect(readFileSync(file('marked.md'), 'utf8')).toBe('\uFEFF# New title')
+  })
+
+  it('only takes the mark away at the very start', () => {
+    writeFileSync(file('inner.md'), 'a\uFEFFb')
+    expect(readForEditor(file('inner.md'))).toBe('a\uFEFFb')
+    writeText(file('inner.md'), 'a\uFEFFb!', 'a\uFEFFb')
+    expect(readFileSync(file('inner.md'), 'utf8')).toBe('a\uFEFFb!')
+  })
+
+  it('leaves no helper file behind after saving', () => {
+    writeFileSync(file('clean.md'), 'one')
+    writeText(file('clean.md'), 'two', 'one')
+    expect(readFileSync(file('clean.md'), 'utf8')).toBe('two')
+    expect(existsSync(file('clean.md.slateforge-saving'))).toBe(false)
+  })
+
+  it('refuses text that would be too large to open again', () => {
+    writeFileSync(file('big.md'), 'small')
+    expect(() => writeText(file('big.md'), 'ä'.repeat(2_600_000), 'small')).toThrow('too long')
+    expect(readFileSync(file('big.md'), 'utf8')).toBe('small')
   })
 
   it('refuses text that is not UTF-8 instead of breaking its letters', () => {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import type { FileInfo, FileKind } from '../shared/types'
 
@@ -7,7 +7,8 @@ import type { FileInfo, FileKind } from '../shared/types'
 
 const MAX_TEXT_BYTES = 5_000_000
 // Marks some UTF-8 files at their very start. It is kept, but not shown.
-const BYTE_ORDER_MARK = '﻿'
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff)
+const withoutMark = (text: string): string => (text.startsWith(BYTE_ORDER_MARK) ? text.slice(1) : text)
 
 // What a linked HTML file may do inside its frame: run scripts and forms and
 // open links. It never gets the rights of the app itself. Sent with the file,
@@ -91,22 +92,33 @@ export function readText(path: string): string {
 //   file, after following links),
 // - or it was changed by another program in the meantime.
 export function writeText(path: string, text: string, expected: string): void {
-  if (typeof text !== 'string' || typeof expected !== 'string' || text.length > MAX_TEXT_BYTES) throw new Error('Invalid text')
+  if (typeof text !== 'string' || typeof expected !== 'string') throw new Error('Invalid text')
+  // Counted in bytes, like when reading, so a saved file can always be opened again.
+  if (Buffer.byteLength(text) + 3 > MAX_TEXT_BYTES) throw new Error('The text is too long to save.')
   if (path.startsWith('\\\\') || path.startsWith('//')) throw new Error('Files on network drives are never changed.')
   // Throws when the file is gone. That also refuses the write.
   const real = realpathSync.native(path)
   if (real.startsWith('\\\\')) throw new Error('Files on network drives are never changed.')
   if (fileKind(path) !== 'markdown' || fileKind(real) !== 'markdown') throw new Error('Only Markdown files can be changed.')
   const current = readText(real)
-  if (current.replace(BYTE_ORDER_MARK, '') !== expected) {
+  if (withoutMark(current) !== expected) {
     throw new Error('The file was changed by another program. Open it again to see the new text.')
   }
-  writeFileSync(real, (current.startsWith(BYTE_ORDER_MARK) ? BYTE_ORDER_MARK : '') + text, 'utf8')
+  // The new text first goes into a file next to the real one, which then
+  // takes its place. If writing fails half way, the old file is untouched.
+  const draft = `${real}.slateforge-saving`
+  try {
+    writeFileSync(draft, (current.startsWith(BYTE_ORDER_MARK) ? BYTE_ORDER_MARK : '') + text, 'utf8')
+    renameSync(draft, real)
+  } catch (error) {
+    rmSync(draft, { force: true })
+    throw error
+  }
 }
 
 // The text for the editor: without the invisible mark at the start.
 export function readForEditor(path: string): string {
-  return readText(path).replace(BYTE_ORDER_MARK, '')
+  return withoutMark(readText(path))
 }
 
 // Hands a linked file to the viewer. `wantedPath` is the path the viewer
