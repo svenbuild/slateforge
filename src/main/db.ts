@@ -25,7 +25,8 @@ type Row = Record<string, unknown>
 const MAX_TITLE = 500
 const MAX_TEXT = 100_000
 const MAX_NOTE = 20_000_000
-const SEARCH_LIMIT = 50
+// Per kind of result (entries and tasks), so one kind cannot crowd out the other.
+const SEARCH_LIMIT = 25
 
 const MIGRATIONS = [
   `
@@ -231,6 +232,12 @@ export function createStore(db: DatabaseSync): Store {
     else run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', key, value)
   }
 
+  // Writes the given columns of one row.
+  function updateRow(table: string, rowId: number, changes: [string, string | number | null][]): void {
+    const assignments = changes.map(([column]) => `${column} = ?`).join(', ')
+    run(`UPDATE ${table} SET ${assignments} WHERE id = ?`, ...changes.map(([, value]) => value), rowId)
+  }
+
   function listTasks(itemId: number): Task[] {
     return all(`SELECT t.* ${ACTIVE_TASKS} AND t.item_id = ? ORDER BY t.position, t.id`, id(itemId)).map(toTask)
   }
@@ -271,8 +278,7 @@ export function createStore(db: DatabaseSync): Store {
       if (patch.color !== undefined) changes.push(['color', text(patch.color, 50)])
       if (patch.sortMode !== undefined) changes.push(['sort_mode', oneOf(patch.sortMode, SORT_MODES)])
       changes.push(['updated_at', now()])
-      const assignments = changes.map(([column]) => `${column} = ?`).join(', ')
-      run(`UPDATE items SET ${assignments} WHERE id = ?`, ...changes.map(([, value]) => value), itemId)
+      updateRow('items', itemId, changes)
     },
 
     setItemOrder(orderedIds) {
@@ -349,8 +355,7 @@ export function createStore(db: DatabaseSync): Store {
       if (patch.dueDate !== undefined) changes.push(['due_date', dateOrNull(patch.dueDate)])
       if (patch.done !== undefined) changes.push(['done', patch.done === true ? 1 : 0])
       changes.push(['updated_at', now()])
-      const assignments = changes.map(([column]) => `${column} = ?`).join(', ')
-      run(`UPDATE tasks SET ${assignments} WHERE id = ?`, ...changes.map(([, value]) => value), taskId)
+      updateRow('tasks', taskId, changes)
     },
 
     // Writes the complete order of one container. Tasks dragged in from another
@@ -444,7 +449,7 @@ export function createStore(db: DatabaseSync): Store {
           snippet: description.toLowerCase().includes(needle) ? makeSnippet(description, query) : null
         })
       }
-      return results.slice(0, SEARCH_LIMIT)
+      return results
     },
 
     // The trash only shows things whose parents still exist. Things below a
@@ -475,16 +480,10 @@ export function createStore(db: DatabaseSync): Store {
       )
     },
 
-    // Puts a trashed row back at the end of its container. Does nothing if the row is gone.
+    // Puts a trashed row back where it was. Does nothing if the row is gone.
     restore(kind, rowId) {
       oneOf(kind, TRASH_KINDS)
-      const row = get(`SELECT * FROM ${TABLES[kind]} WHERE id = ? AND deleted_at IS NOT NULL`, id(rowId))
-      if (!row) return
-      let position = 0
-      if (kind === 'item') position = nextPosition('items', 'deleted_at IS NULL')
-      else if (kind === 'column') position = nextPosition('columns', 'board_id = ?', row.board_id as number)
-      else position = nextPosition('tasks', 'item_id = ?', row.item_id as number)
-      run(`UPDATE ${TABLES[kind]} SET deleted_at = NULL, position = ? WHERE id = ?`, position, rowId)
+      run(`UPDATE ${TABLES[kind]} SET deleted_at = NULL WHERE id = ?`, id(rowId))
     },
 
     purge(kind, rowId) {

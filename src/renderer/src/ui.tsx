@@ -167,12 +167,12 @@ export function Highlight({ text, query }: { text: string; query: string }) {
   )
 }
 
-// Scrolls to the task that a search result asked for, once it is on screen.
-export function useScrollToFocusTask(focusTask: ViewProps['focusTask'], loaded: boolean): void {
+// Keeps the selected task on screen, for example after opening a search result.
+export function useScrollToSelected(selectedId: number | null, loaded: boolean): void {
   useEffect(() => {
-    if (!focusTask || !loaded) return
+    if (selectedId === null || !loaded) return
     document.querySelector('.task-row.selected, .card.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [focusTask, loaded])
+  }, [selectedId, loaded])
 }
 
 // Change and delete tasks in the local state and in the database.

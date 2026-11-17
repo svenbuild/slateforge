@@ -184,6 +184,15 @@ try {
   check((await editor.locator('blockquote').count()) === 1, 'pasted Markdown quote is formatted')
   await shot('note-dark')
 
+  // text typed right before switching to another entry is saved
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('Typed right before switching')
+  await page.locator('.sidebar-row', { hasText: 'Groceries' }).click()
+  await page.locator('.task-row').first().waitFor()
+  await page.locator('.sidebar-row', { hasText: 'Garden ideas' }).click()
+  await page.locator('.note-content h1').waitFor()
+  check((await page.locator('.note-content').innerText()).includes('Typed right before switching'), 'text typed right before switching entries was saved')
+
   // ---- search ----
   await page.keyboard.press('Control+K')
   await page.locator('.search-input input').fill('garden')

@@ -19,7 +19,7 @@ import { moveId, placeTask } from '../../shared/logic'
 import type { Column, Task } from '../../shared/types'
 import { api } from './api'
 import { TaskPanel } from './TaskPanel'
-import { Checkbox, InlineEdit, TaskMeta, ViewHeader, useScrollToFocusTask, useTaskActions, type ViewProps } from './ui'
+import { Checkbox, InlineEdit, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
 // Drag ids are strings so columns and tasks cannot be mixed up.
 const columnDragId = (id: number): string => `column-${id}`
@@ -171,7 +171,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
   useEffect(() => {
     if (focusTask) setSelectedId(focusTask.taskId)
   }, [focusTask])
-  useScrollToFocusTask(focusTask, tasks.length > 0)
+  useScrollToSelected(selectedId, tasks.length > 0)
 
   const tasksOf = (columnId: number): Task[] => tasks.filter((task) => task.columnId === columnId)
   const selected = tasks.find((task) => task.id === selectedId && columns.some((column) => column.id === task.columnId))

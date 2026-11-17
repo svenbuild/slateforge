@@ -27,12 +27,10 @@ const SAVE_DELAY_MS = 400
 // code fences, bold text or links.
 const MARKDOWN_HINT = /^(#{1,6} |[-*+] |\d+\. |> |```)|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)/m
 
+// A note that cannot be read must fail loudly. Opening it as an empty note
+// would overwrite the stored text with the first keystroke.
 function parseNote(json: string): JSONContent | null {
-  try {
-    return json === '' ? null : JSON.parse(json)
-  } catch {
-    return null
-  }
+  return json === '' ? null : JSON.parse(json)
 }
 
 interface Tool {
@@ -81,10 +79,23 @@ function Toolbar({ editor }: { editor: Editor }) {
 }
 
 function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent | null }) {
-  // Content that still has to be written to the database.
-  const pending = useRef<{ json: string; text: string } | null>(null)
+  // True while the editor has changes that are not in the database yet.
+  const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
   const editorRef = useRef<Editor | null>(null)
+
+  // Writes unsaved changes. `blocking` is for a closing window, where an
+  // async call could get lost.
+  const save = (blocking = false): void => {
+    window.clearTimeout(timer.current)
+    const current = editorRef.current
+    if (!dirty.current || !current) return
+    dirty.current = false
+    const json = JSON.stringify(current.getJSON())
+    const text = current.getText({ blockSeparator: '\n' })
+    if (blocking) api.saveNoteSync(itemId, json, text)
+    else api.saveNote(itemId, json, text)
+  }
 
   const editor = useEditor({
     extensions: [
@@ -107,33 +118,23 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
         return editorRef.current.commands.insertContent(text, { contentType: 'markdown' })
       }
     },
-    onUpdate: ({ editor: current }) => {
-      pending.current = { json: JSON.stringify(current.getJSON()), text: current.getText({ blockSeparator: '\n' }) }
+    onUpdate: () => {
+      dirty.current = true
       window.clearTimeout(timer.current)
-      timer.current = window.setTimeout(() => {
-        if (!pending.current) return
-        api.saveNote(itemId, pending.current.json, pending.current.text)
-        pending.current = null
-      }, SAVE_DELAY_MS)
+      timer.current = window.setTimeout(save, SAVE_DELAY_MS)
     }
   })
   editorRef.current = editor
 
+  // Save what the timer did not save yet when the window closes or the note is left.
   useEffect(() => {
-    // The window is closing: only a blocking call is sure to arrive.
-    const onUnload = (): void => {
-      if (pending.current) api.saveNoteSync(itemId, pending.current.json, pending.current.text)
-      pending.current = null
-    }
+    const onUnload = (): void => save(true)
     window.addEventListener('beforeunload', onUnload)
     return () => {
       window.removeEventListener('beforeunload', onUnload)
-      window.clearTimeout(timer.current)
-      // Leaving the note: save what the timer did not save yet.
-      if (pending.current) api.saveNote(itemId, pending.current.json, pending.current.text)
-      pending.current = null
+      save()
     }
-  }, [itemId])
+  }, [])
 
   return (
     <>

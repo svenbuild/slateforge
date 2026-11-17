@@ -143,7 +143,7 @@ describe('notes', () => {
 })
 
 describe('trash', () => {
-  it('hides a deleted task and restores it at the end', () => {
+  it('hides a deleted task and restores it in its old place', () => {
     const list = store.createItem('list', 'L')
     const a = store.createTask(list.id, null, 'A')
     store.createTask(list.id, null, 'B')
@@ -151,7 +151,7 @@ describe('trash', () => {
     expect(titles(store.listTasks(list.id))).toEqual(['B'])
     expect(store.listTrash()).toMatchObject([{ kind: 'task', id: a.id, title: 'A', context: 'L' }])
     store.restore('task', a.id)
-    expect(titles(store.listTasks(list.id))).toEqual(['B', 'A'])
+    expect(titles(store.listTasks(list.id))).toEqual(['A', 'B'])
     expect(store.listTrash()).toEqual([])
   })
 
@@ -165,7 +165,7 @@ describe('trash', () => {
     expect(store.listTrash()).toMatchObject([{ kind: 'column', id: todo.id, context: 'B' }])
     store.restore('column', todo.id)
     const data = store.getBoard(board.id)
-    expect(titles(data.columns)).toEqual(['In progress', 'Done', 'To do'])
+    expect(titles(data.columns)).toEqual(['To do', 'In progress', 'Done'])
     expect(titles(data.tasks)).toEqual(['A'])
   })
 

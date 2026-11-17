@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { API_METHODS, type Api } from '../shared/types'
@@ -55,13 +55,21 @@ function start(): void {
     showDataFolder: () => shell.showItemInFolder(dataFile)
   }
 
+  // Only the app window may use the API.
+  const checkSender = (sender: WebContents): void => {
+    if (sender !== mainWindow?.webContents) throw new Error('Unknown sender')
+  }
   for (const method of API_METHODS) {
     const handler = api[method] as (...args: unknown[]) => unknown
-    ipcMain.handle(`api:${method}`, (_event, ...args) => handler(...args))
+    ipcMain.handle(`api:${method}`, (event, ...args) => {
+      checkSender(event.sender)
+      return handler(...args)
+    })
   }
   // Used while the window closes, when an async call could get lost.
   ipcMain.on('api:saveNoteSync', (event, itemId, contentJson, contentText) => {
     try {
+      checkSender(event.sender)
       store.saveNote(itemId, contentJson, contentText)
     } catch (error) {
       console.error(error)

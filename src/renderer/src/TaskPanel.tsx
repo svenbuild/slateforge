@@ -65,6 +65,7 @@ export function TaskPanel(props: {
         <input
           id="task-due"
           type="date"
+          max="9999-12-31"
           value={task.dueDate ?? ''}
           onChange={(event) => onChange({ dueDate: event.target.value || null })}
         />

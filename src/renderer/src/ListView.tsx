@@ -7,7 +7,7 @@ import { moveId, reorderSubset, sortTasks } from '../../shared/logic'
 import type { SortMode, Task } from '../../shared/types'
 import { api } from './api'
 import { TaskPanel } from './TaskPanel'
-import { Checkbox, TaskMeta, ViewHeader, useScrollToFocusTask, useTaskActions, type ViewProps } from './ui'
+import { Checkbox, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
 interface RowProps {
   task: Task
@@ -74,7 +74,7 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted }: 
   useEffect(() => {
     if (focusTask) setSelectedId(focusTask.taskId)
   }, [focusTask])
-  useScrollToFocusTask(focusTask, tasks.length > 0)
+  useScrollToSelected(selectedId, tasks.length > 0)
 
   const open = sortTasks(
     tasks.filter((task) => !task.done),
