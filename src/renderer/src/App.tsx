@@ -90,6 +90,7 @@ export function App() {
   useEffect(
     () =>
       api.onExternalChange(() => {
+        api.getSettings().then((settings) => applyTheme(settings.theme))
         api.listItems().then(setItems)
         setVersion((current) => current + 1)
         setExternalVersion((current) => current + 1)

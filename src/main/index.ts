@@ -99,6 +99,8 @@ function start(): void {
     const version = dataVersion()
     if (version === seenVersion) return
     seenVersion = version
+    // The change may have been the theme.
+    applyTheme(store.getSettings().theme)
     mainWindow?.webContents.send('external-change')
   }, 1000)
   applyTheme(store.getSettings().theme)

@@ -373,15 +373,18 @@ export function createStore(db: DatabaseSync): Store {
     // Writes the complete order of one folder (or of the top level). Items
     // dragged in from somewhere else are moved by this as well.
     setItemOrder(parentId, orderedIds) {
-      checkParent(idOrNull(parentId))
+      idOrNull(parentId)
       const ids = idList(orderedIds)
-      // Trashed items stay where they are.
-      ids.forEach(activeItem)
-      // A folder must not end up inside itself.
-      for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
-        if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
-      }
+      // The checks run inside the transaction, so another program cannot
+      // change the folders between the checks and the move.
       transaction(db, () => {
+        checkParent(parentId)
+        // Trashed items stay where they are.
+        ids.forEach(activeItem)
+        // A folder must not end up inside itself.
+        for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
+          if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
+        }
         ids.forEach((itemId, position) =>
           run('UPDATE items SET position = ?, parent_id = ? WHERE id = ?', position, parentId, itemId)
         )
