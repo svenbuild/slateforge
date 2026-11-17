@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
+import type { ViewResult } from './files'
 
 // Serves the app to a normal browser on this computer. The browser gets the
 // same pages as the app window and calls the same API over HTTP.
@@ -12,6 +13,10 @@ import { extname, join, resolve, sep } from 'node:path'
 // the key in the part of the address after "#", which is never sent over the
 // network, and keeps it for that one tab. No cookie is used, because cookies
 // would also go to other web servers on this computer.
+//
+// Pages and linked files are shown in frames. A frame cannot send a header,
+// so their addresses carry a second key of their own. That key only opens
+// these views, never the API.
 
 const MAX_BODY_BYTES = 30_000_000
 const CONTENT_TYPES: Record<string, string> = {
@@ -30,6 +35,8 @@ export interface WebServerOptions {
   call: (method: string, args: unknown[]) => unknown
   // A number that grows with every change of the data.
   changes: () => number
+  // Gives the document for a viewer frame, for example "page/12".
+  view: (path: string) => ViewResult
 }
 
 export interface WebServer {
@@ -56,6 +63,8 @@ function readBody(request: IncomingMessage): Promise<string> {
 
 export function startWebServer(options: WebServerOptions): Promise<WebServer> {
   const key = randomBytes(24).toString('hex')
+  const viewKey = randomBytes(24).toString('hex')
+  const viewBase = `/view/${viewKey}/`
   const root = resolve(options.root)
   let origin = ''
 
@@ -63,7 +72,7 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
     response.writeHead(status, {
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
-      // No other page may show the app inside a frame.
+      // No other page may show the app inside a frame. (Views say SAMEORIGIN.)
       'X-Frame-Options': 'DENY',
       ...headers
     })
@@ -83,6 +92,15 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
       if (request.headers.origin !== undefined && request.headers.origin !== origin) return send(response, 403, 'Forbidden')
     }
 
+    if (request.method === 'GET' && url.pathname.startsWith(viewBase)) {
+      const result = options.view(url.pathname.slice(viewBase.length))
+      return send(response, result.status, result.body, {
+        'Content-Type': result.type,
+        'X-Frame-Options': 'SAMEORIGIN',
+        ...(result.policy ? { 'Content-Security-Policy': result.policy } : {})
+      })
+    }
+
     if (request.method === 'GET' && url.pathname === '/changes') return send(response, 200, String(options.changes()))
 
     if (request.method === 'POST' && url.pathname.startsWith('/api/')) {
@@ -92,7 +110,9 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
         // The call runs in one go, so these two numbers tell exactly whether
         // it changed the data itself.
         const before = options.changes()
-        const result = options.call(url.pathname.slice('/api/'.length), args)
+        const method = url.pathname.slice('/api/'.length)
+        // In the browser the views are reached through this server.
+        const result = method === 'getViewBase' ? viewBase : await options.call(method, args)
         return send(response, 200, JSON.stringify({ result: result ?? null }), {
           'Content-Type': 'application/json',
           'X-Changes-Before': String(before),

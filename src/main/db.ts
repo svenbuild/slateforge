@@ -18,7 +18,18 @@ import {
 } from '../shared/types'
 
 // The part of the API that only needs the database.
-export type Store = Omit<Api, 'getDataPath' | 'showDataFolder' | 'openInBrowser'>
+export type Store = Omit<
+  Api,
+  | 'getDataPath'
+  | 'showDataFolder'
+  | 'openInBrowser'
+  | 'getFileInfo'
+  | 'readFileText'
+  | 'writeFileText'
+  | 'pickFiles'
+  | 'openFile'
+  | 'getViewBase'
+>
 
 type Row = Record<string, unknown>
 
@@ -154,6 +165,13 @@ export const MIGRATIONS = [
       SELECT i.id FROM items i JOIN live ON i.parent_id = live.id WHERE i.deleted_at IS NULL
     )
     SELECT items.* FROM items JOIN live ON live.id = items.id;
+  `,
+  // Version 5: links to local files.
+  `
+  CREATE TABLE files (
+    item_id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+    path TEXT NOT NULL DEFAULT ''
+  );
   `
 ]
 
@@ -368,6 +386,7 @@ export function createStore(db: DatabaseSync): Store {
         )
         if (type === 'note') run('INSERT INTO notes (item_id) VALUES (?)', itemId)
         if (type === 'page') run('INSERT INTO pages (item_id) VALUES (?)', itemId)
+        if (type === 'file') run('INSERT INTO files (item_id) VALUES (?)', itemId)
         if (type === 'board') {
           ;['To do', 'In progress', 'Done'].forEach((columnTitle, position) =>
             run('INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)', itemId, columnTitle, position)
@@ -588,6 +607,20 @@ export function createStore(db: DatabaseSync): Store {
       const item = store.createItem('page', rawTitle, parentId)
       store.savePage(item.id, html)
       return item
+    },
+
+    createFile(path, parentId) {
+      const file = text(path, 1000).trim()
+      if (file === '') throw new Error('No file given')
+      // The title is the file name, the last part of the path.
+      const item = store.createItem('file', file.split(/[\\/]/).pop() ?? file, parentId)
+      run('UPDATE files SET path = ? WHERE item_id = ?', file, item.id)
+      return item
+    },
+
+    getFilePath(itemId) {
+      if (activeItem(id(itemId)).type !== 'file') throw new Error('Not a file')
+      return (get('SELECT path FROM files WHERE item_id = ?', itemId)?.path as string | undefined) ?? ''
     },
 
     search(rawQuery) {

@@ -1,9 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, shell, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import iconPath from '../../build/icon.ico?asset'
+import { PAGE_POLICY, pageDocument } from '../shared/page'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
+import { fileInfo, NOT_FOUND, readText, viewFile, writeText, type ViewResult } from './files'
 import { startWebServer, type WebServer } from './web'
 
 // English texts with day-first dates in the built-in date picker.
@@ -11,6 +13,16 @@ app.commandLine.appendSwitch('lang', 'en-GB')
 
 // Lets Windows treat the app as its own program in the taskbar.
 app.setAppUserModelId('com.slateforge.app')
+
+// Pages and linked files are shown in frames under this address. It is a
+// separate origin, so scripts inside them cannot reach the app.
+const VIEW_SCHEME = 'slateforge-view'
+// Address of the PDF viewer that is built into Electron.
+const PDF_VIEWER = 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/'
+// The fetch and stream rights are what the built-in PDF viewer needs to read a file.
+protocol.registerSchemesAsPrivileged([
+  { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 // Tests and the screenshot script use their own data folder.
 if (process.env.SLATEFORGE_DATA_DIR) app.setPath('userData', process.env.SLATEFORGE_DATA_DIR)
@@ -66,7 +78,9 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Needed for the built-in PDF viewer.
+      plugins: true
     }
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
@@ -79,8 +93,12 @@ function createWindow(): void {
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
-  // Links inside an HTML page must not load websites into the app either.
-  mainWindow.webContents.on('will-frame-navigate', (event) => event.preventDefault())
+  // Frames only ever show pages and linked files, never websites. The
+  // built-in PDF viewer shows the file in an inner frame of its own.
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    const allowed = event.url.startsWith(`${VIEW_SCHEME}://`) || event.url.startsWith(PDF_VIEWER)
+    if (!allowed) event.preventDefault()
+  })
 
   if (process.env.ELECTRON_RENDERER_URL) mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -123,10 +141,29 @@ function start(): void {
     },
     getDataPath: () => dataFile,
     showDataFolder: () => shell.showItemInFolder(dataFile),
+    getFileInfo: (itemId) => fileInfo(store.getFilePath(itemId)),
+    readFileText: (itemId) => readText(store.getFilePath(itemId)),
+    writeFileText: (itemId, text) => writeText(store.getFilePath(itemId), text),
+    async pickFiles() {
+      const options: Electron.OpenDialogOptions = {
+        title: 'Link files',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: 'Markdown, HTML and PDF', extensions: ['md', 'markdown', 'html', 'htm', 'pdf'] },
+          { name: 'All files', extensions: ['*'] }
+        ]
+      }
+      const chosen = await (mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options))
+      return chosen.filePaths
+    },
+    openFile(itemId) {
+      shell.openPath(store.getFilePath(itemId))
+    },
+    getViewBase: () => `${VIEW_SCHEME}://v/`,
     openInBrowser(itemId) {
       if (!Number.isInteger(itemId)) throw new Error('Invalid id')
       // The web server only starts with the first use of this button.
-      webServer ??= startWebServer({ root: join(__dirname, '../renderer'), call: callFromBrowser, changes: () => changes })
+      webServer ??= startWebServer({ root: join(__dirname, '../renderer'), call: callFromBrowser, changes: () => changes, view })
       webServer.then(
         (server) => shell.openExternal(server.address(itemId)),
         (error) => {
@@ -139,8 +176,31 @@ function start(): void {
   }
   let webServer: Promise<WebServer> | undefined
 
+  // The document for a viewer frame: "page/<id>" or "file/<id>/<path in its folder>".
+  const view = (path: string): ViewResult => {
+    const [kind, idText, ...rest] = path.split('/')
+    const itemId = Number(idText)
+    try {
+      if (kind === 'page') {
+        const title = store.listItems().find((item) => item.id === itemId)?.title ?? ''
+        return { status: 200, type: 'text/html; charset=utf-8', body: pageDocument(title, store.getPage(itemId)), policy: PAGE_POLICY }
+      }
+      if (kind === 'file') return viewFile(store.getFilePath(itemId), rest.map(decodeURIComponent).join('/'))
+    } catch {
+      // An unknown or trashed entry is simply not found.
+    }
+    return NOT_FOUND
+  }
+  protocol.handle(VIEW_SCHEME, (request) => {
+    const result = view(new URL(request.url).pathname.slice(1))
+    return new Response(result.body as BodyInit, {
+      status: result.status,
+      headers: { 'Content-Type': result.type, ...(result.policy ? { 'Content-Security-Policy': result.policy } : {}) }
+    })
+  })
+
   // Reading, and remembering the last opened entry, change nothing others must load.
-  const changesData = (method: string): boolean => !/^(list|get|search|setLastItem|showDataFolder|openInBrowser)/.test(method)
+  const changesData = (method: string): boolean => !/^(list|get|search|read|pick|open|setLastItem|showDataFolder)/.test(method)
 
   const run = (method: string, args: unknown[]): unknown => {
     if (!(API_METHODS as readonly string[]).includes(method)) throw new Error('Unknown method')

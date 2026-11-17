@@ -21,6 +21,7 @@ import {
   Leaf,
   Lightbulb,
   ListChecks,
+  Paperclip,
   Music,
   Plane,
   Rocket,
@@ -41,6 +42,7 @@ export const ICONS: Record<string, LucideIcon> = {
   checklist: ListChecks,
   note: FileText,
   page: AppWindow,
+  file: Paperclip,
   star: Star,
   heart: Heart,
   home: House,
@@ -84,10 +86,10 @@ export const COLORS: Record<string, string> = {
   pink: '#d6409f'
 }
 
-const DEFAULT_ICON: Record<ItemType, string> = { board: 'kanban', list: 'checklist', note: 'note', page: 'page', folder: 'folder' }
-const DEFAULT_COLOR: Record<ItemType, string> = { board: 'blue', list: 'green', note: 'orange', page: 'purple', folder: 'gray' }
+const DEFAULT_ICON: Record<ItemType, string> = { board: 'kanban', list: 'checklist', note: 'note', page: 'page', file: 'file', folder: 'folder' }
+const DEFAULT_COLOR: Record<ItemType, string> = { board: 'blue', list: 'green', note: 'orange', page: 'purple', file: 'teal', folder: 'gray' }
 
-export const TYPE_LABEL: Record<ItemType, string> = { board: 'Board', list: 'List', note: 'Note', page: 'Page', folder: 'Folder' }
+export const TYPE_LABEL: Record<ItemType, string> = { board: 'Board', list: 'List', note: 'Note', page: 'Page', file: 'File', folder: 'Folder' }
 
 export function iconKey(item: Pick<Item, 'type' | 'icon'>): string {
   return ICONS[item.icon] ? item.icon : DEFAULT_ICON[item.type]

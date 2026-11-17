@@ -82,6 +82,11 @@ function browserApi(): RendererApi {
   return api as unknown as RendererApi
 }
 
+// Start of the addresses that show pages and linked files in a frame. It
+// never changes while the app runs, so it is asked for only once.
+let viewBase: Promise<string> | undefined
+export const getViewBase = (): Promise<string> => (viewBase ??= api.getViewBase())
+
 // True when the app runs in a normal browser instead of its own window.
 export const inBrowser = window.api === undefined
 

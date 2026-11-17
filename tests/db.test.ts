@@ -356,6 +356,24 @@ describe('pages', () => {
   })
 })
 
+describe('linked files', () => {
+  it('links a file by its path and names it after the file', () => {
+    const folder = store.createItem('folder', 'Docs', null)
+    const file = store.createFile('C:\\work\\reports\\Q3 summary.md', folder.id)
+    expect(file).toMatchObject({ type: 'file', title: 'Q3 summary.md', parentId: folder.id })
+    expect(store.getFilePath(file.id)).toBe('C:\\work\\reports\\Q3 summary.md')
+    expect(store.createFile('/home/me/notes/plan.html', null).title).toBe('plan.html')
+    expect(store.search('q3 summary')).toMatchObject([{ itemId: file.id }])
+  })
+
+  it('refuses missing paths and other kinds of entries', () => {
+    expect(() => store.createFile('   ', null)).toThrow()
+    const note = store.createItem('note', 'N', null)
+    expect(() => store.getFilePath(note.id)).toThrow()
+    expect(store.listItems().map((item) => item.type)).toEqual(['note'])
+  })
+})
+
 describe('notes from Markdown', () => {
   it('stores Markdown for the editor and plain text for the search', () => {
     const note = store.createNote('Plan', null, '# Goals\n- ship it')

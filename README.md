@@ -26,8 +26,12 @@ computer: no cloud, no account.
 - **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
   button brings back the last deleted thing.
 - **Pages** hold free HTML, for summaries, overviews and reports. You can
-  edit the HTML in the app. All pages share one house style, defined in
+  edit the HTML in the app. A page may run its own scripts, but it cannot
+  reach the app and cannot load anything from the internet. All pages share one house style, defined in
   `assets/page-style.html`.
+- **Files** link local Markdown, HTML and PDF files into the sidebar. The
+  file stays where it is. Markdown can be edited and is written back (never
+  on network drives), HTML runs with its scripts, PDFs open in a viewer.
 - **Open in browser**: a small button in the header opens the whole app in
   your browser, on the current entry. Everything works there as in the app,
   and both sides show each other's changes within about a second. For this
