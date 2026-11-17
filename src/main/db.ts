@@ -28,7 +28,7 @@ const MAX_NOTE = 20_000_000
 // Per kind of result (entries and tasks), so one kind cannot crowd out the other.
 const SEARCH_LIMIT = 25
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   `
   CREATE TABLE items (
     id INTEGER PRIMARY KEY,
@@ -75,27 +75,60 @@ const MIGRATIONS = [
   CREATE INDEX idx_columns_board ON columns(board_id);
   CREATE INDEX idx_tasks_item ON tasks(item_id);
   CREATE INDEX idx_tasks_column ON tasks(column_id);
+  `,
+  // Version 2: folders. The type check of a table cannot be changed in place,
+  // so the items table is built again (foreign keys are off during migrations).
+  `
+  CREATE TABLE items_new (
+    id INTEGER PRIMARY KEY,
+    parent_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('board', 'list', 'note', 'folder')),
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL,
+    sort_mode TEXT NOT NULL DEFAULT 'manual' CHECK (sort_mode IN ('manual', 'due', 'priority')),
+    collapsed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  INSERT INTO items_new (id, type, title, icon, color, position, sort_mode, created_at, updated_at, deleted_at)
+    SELECT id, type, title, icon, color, position, sort_mode, created_at, updated_at, deleted_at FROM items;
+  DROP TABLE items;
+  ALTER TABLE items_new RENAME TO items;
+  CREATE INDEX idx_items_parent ON items(parent_id);
+  -- Items that are not in the trash and not inside a trashed folder.
+  CREATE VIEW live_items AS
+    WITH RECURSIVE live(id) AS (
+      SELECT id FROM items WHERE parent_id IS NULL AND deleted_at IS NULL
+      UNION ALL
+      SELECT i.id FROM items i JOIN live ON i.parent_id = live.id WHERE i.deleted_at IS NULL
+    )
+    SELECT items.* FROM items JOIN live ON live.id = items.id;
   `
 ]
 
 // A task counts as active when the task, its entry and its column are not in the trash.
 const ACTIVE_TASKS = `
   FROM tasks t
-  JOIN items i ON i.id = t.item_id
+  JOIN live_items i ON i.id = t.item_id
   LEFT JOIN columns c ON c.id = t.column_id
-  WHERE t.deleted_at IS NULL AND i.deleted_at IS NULL
+  WHERE t.deleted_at IS NULL
     AND (t.column_id IS NULL OR c.deleted_at IS NULL)`
 
 const TABLES: Record<TrashKind, string> = { item: 'items', column: 'columns', task: 'tasks' }
 
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file)
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;')
+  // Foreign keys stay off while tables are rebuilt by a migration.
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = OFF;')
   // SQLite only lowercases ASCII, so search uses the JavaScript version.
   db.function('ulower', { deterministic: true }, (value) =>
     typeof value === 'string' ? value.toLowerCase() : value
   )
   migrate(db)
+  db.exec('PRAGMA foreign_keys = ON;')
   return db
 }
 
@@ -118,6 +151,7 @@ function migrate(db: DatabaseSync): void {
   for (let next = version; next < MIGRATIONS.length; next++) {
     transaction(db, () => {
       db.exec(MIGRATIONS[next])
+      if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Migration broke a reference.')
       db.exec(`PRAGMA user_version = ${next + 1}`)
     })
   }
@@ -166,11 +200,13 @@ function dateOrNull(value: unknown): string | null {
 function toItem(row: Row): Item {
   return {
     id: row.id as number,
+    parentId: row.parent_id as number | null,
     type: row.type as ItemType,
     title: row.title as string,
     icon: row.icon as string,
     color: row.color as string,
-    sortMode: row.sort_mode as Item['sortMode']
+    sortMode: row.sort_mode as Item['sortMode'],
+    collapsed: row.collapsed === 1
   }
 }
 
@@ -207,9 +243,14 @@ export function createStore(db: DatabaseSync): Store {
   }
 
   function activeItem(itemId: number): Item {
-    const row = get('SELECT * FROM items WHERE id = ? AND deleted_at IS NULL', itemId)
+    const row = get('SELECT * FROM live_items WHERE id = ?', itemId)
     if (!row) throw new Error('Entry not found')
     return toItem(row)
+  }
+
+  // A parent is either the top level (null) or a folder.
+  function checkParent(parentId: number | null): void {
+    if (parentId !== null && activeItem(parentId).type !== 'folder') throw new Error('Not a folder')
   }
 
   // Checks that a task container is valid: boards need one of their columns, lists need none.
@@ -244,19 +285,21 @@ export function createStore(db: DatabaseSync): Store {
 
   return {
     listItems() {
-      return all('SELECT * FROM items WHERE deleted_at IS NULL ORDER BY position, id').map(toItem)
+      return all('SELECT * FROM live_items ORDER BY position, id').map(toItem)
     },
 
-    createItem(type, rawTitle) {
+    createItem(type, rawTitle, parentId) {
       oneOf(type, ITEM_TYPES)
+      checkParent(idOrNull(parentId))
       const name = title(rawTitle)
       let itemId = 0
       transaction(db, () => {
         itemId = run(
-          'INSERT INTO items (type, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO items (parent_id, type, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          parentId,
           type,
           name,
-          nextPosition('items', '1 = 1'),
+          nextPosition('items', 'parent_id IS ?', parentId),
           now(),
           now()
         )
@@ -272,24 +315,44 @@ export function createStore(db: DatabaseSync): Store {
 
     updateItem(itemId, patch) {
       id(itemId)
-      const changes: [string, string][] = []
+      const changes: [string, string | number][] = []
       if (patch.title !== undefined) changes.push(['title', title(patch.title)])
       if (patch.icon !== undefined) changes.push(['icon', text(patch.icon, 50)])
       if (patch.color !== undefined) changes.push(['color', text(patch.color, 50)])
       if (patch.sortMode !== undefined) changes.push(['sort_mode', oneOf(patch.sortMode, SORT_MODES)])
+      if (patch.collapsed !== undefined) changes.push(['collapsed', patch.collapsed === true ? 1 : 0])
       changes.push(['updated_at', now()])
       updateRow('items', itemId, changes)
     },
 
-    setItemOrder(orderedIds) {
+    // Writes the complete order of one folder (or of the top level). Items
+    // dragged in from somewhere else are moved by this as well.
+    setItemOrder(parentId, orderedIds) {
+      checkParent(idOrNull(parentId))
       const ids = idList(orderedIds)
+      // A folder must not end up inside itself.
+      for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
+        if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
+      }
       transaction(db, () => {
-        ids.forEach((itemId, position) => run('UPDATE items SET position = ? WHERE id = ?', position, itemId))
+        ids.forEach((itemId, position) =>
+          run('UPDATE items SET position = ?, parent_id = ? WHERE id = ?', position, parentId, itemId)
+        )
       })
     },
 
-    deleteItem(itemId) {
-      run('UPDATE items SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', now(), id(itemId))
+    deleteItem(itemId, keepContent) {
+      const row = get('SELECT parent_id FROM items WHERE id = ? AND deleted_at IS NULL', id(itemId))
+      if (!row) return
+      const parentId = row.parent_id as number | null
+      transaction(db, () => {
+        if (keepContent === true) {
+          // The content goes to the end of the level above, in its old order.
+          const offset = nextPosition('items', 'parent_id IS ?', parentId)
+          run('UPDATE items SET parent_id = ?, position = position + ? WHERE parent_id = ?', parentId, offset, itemId)
+        }
+        run('UPDATE items SET deleted_at = ? WHERE id = ?', now(), itemId)
+      })
     },
 
     getBoard(boardId) {
@@ -380,6 +443,19 @@ export function createStore(db: DatabaseSync): Store {
       run('UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', now(), id(taskId))
     },
 
+    listDueTasks(untilDate) {
+      return all(
+        `SELECT t.* ${ACTIVE_TASKS} AND t.done = 0 AND t.due_date <= ? ORDER BY t.due_date, t.id`,
+        dateOrNull(untilDate)
+      ).map(toTask)
+    },
+
+    listProgress() {
+      return all(`SELECT t.item_id, COUNT(*) AS total, SUM(t.done) AS done ${ACTIVE_TASKS} GROUP BY t.item_id`).map(
+        (row) => ({ itemId: row.item_id as number, total: Number(row.total), done: Number(row.done) })
+      )
+    },
+
     getNote(itemId) {
       const row = get('SELECT content_json FROM notes WHERE item_id = ?', id(itemId))
       return (row?.content_json as string | undefined) ?? ''
@@ -403,8 +479,8 @@ export function createStore(db: DatabaseSync): Store {
 
       const items = all(
         `SELECT i.id, i.type, i.title, COALESCE(n.content_text, '') AS body
-         FROM items i LEFT JOIN notes n ON n.item_id = i.id
-         WHERE i.deleted_at IS NULL
+         FROM live_items i LEFT JOIN notes n ON n.item_id = i.id
+         WHERE i.type <> 'folder'
            AND (instr(ulower(i.title), ?) > 0 OR instr(ulower(COALESCE(n.content_text, '')), ?) > 0)
          ORDER BY instr(ulower(i.title), ?) = 0, i.position, i.id
          LIMIT ?`,
@@ -457,15 +533,15 @@ export function createStore(db: DatabaseSync): Store {
     listTrash() {
       const rows = all(
         `SELECT 'item' AS kind, id, title, type AS context, deleted_at FROM items
-         WHERE deleted_at IS NOT NULL
+         WHERE deleted_at IS NOT NULL AND (parent_id IS NULL OR parent_id IN (SELECT id FROM live_items))
          UNION ALL
          SELECT 'column', c.id, c.title, i.title, c.deleted_at
-         FROM columns c JOIN items i ON i.id = c.board_id
-         WHERE c.deleted_at IS NOT NULL AND i.deleted_at IS NULL
+         FROM columns c JOIN live_items i ON i.id = c.board_id
+         WHERE c.deleted_at IS NOT NULL
          UNION ALL
          SELECT 'task', t.id, t.title, i.title, t.deleted_at
-         FROM tasks t JOIN items i ON i.id = t.item_id LEFT JOIN columns c ON c.id = t.column_id
-         WHERE t.deleted_at IS NOT NULL AND i.deleted_at IS NULL
+         FROM tasks t JOIN live_items i ON i.id = t.item_id LEFT JOIN columns c ON c.id = t.column_id
+         WHERE t.deleted_at IS NOT NULL
            AND (t.column_id IS NULL OR c.deleted_at IS NULL)
          ORDER BY deleted_at DESC`
       )
@@ -501,7 +577,7 @@ export function createStore(db: DatabaseSync): Store {
       const values = new Map(all('SELECT key, value FROM settings').map((row) => [row.key, row.value]))
       const theme = THEMES.includes(values.get('theme') as Theme) ? (values.get('theme') as Theme) : 'system'
       const lastId = Number(values.get('lastItemId'))
-      const lastItem = get('SELECT id FROM items WHERE id = ? AND deleted_at IS NULL', lastId || 0)
+      const lastItem = get("SELECT id FROM live_items WHERE id = ? AND type <> 'folder'", lastId || 0)
       return { theme, lastItemId: lastItem ? lastId : null }
     },
 
@@ -516,7 +592,7 @@ export function createStore(db: DatabaseSync): Store {
 
     getStats() {
       const byType = (type: ItemType): number =>
-        count('SELECT COUNT(*) AS n FROM items WHERE type = ? AND deleted_at IS NULL', type)
+        count('SELECT COUNT(*) AS n FROM live_items WHERE type = ?', type)
       return {
         boards: byType('board'),
         lists: byType('list'),

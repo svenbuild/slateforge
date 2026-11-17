@@ -10,6 +10,11 @@ computer: no cloud, no account.
 - **Sidebar** with boards, lists and notes. Each entry has its own icon and
   color, can be renamed in place (double click or F2) and reordered by drag and
   drop. The app opens the entry you used last.
+- **Folders** group entries and can be nested as deep as you like. Drag an
+  entry onto a folder to move it in. A number next to each entry and folder
+  shows the open tasks, and a filter narrows the sidebar by name.
+- **Overview** page with everything that is overdue or due in the next 7 days
+  across all boards and lists, plus the progress of each board and list.
 - **Boards**: kanban columns and tasks, both movable by drag and drop.
 - **Lists**: checkable tasks, sorted manually, by due date or by priority.
   Completed tasks are shown separately.
@@ -20,6 +25,7 @@ computer: no cloud, no account.
 - **Search** over everything with `Ctrl+K`, usable with the keyboard only.
 - **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
   button brings back the last deleted thing.
+- **Own title bar** with the search in the middle.
 - **Settings**: light, dark, black or system design, statistics and the location of
   the data file.
 

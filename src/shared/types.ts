@@ -1,9 +1,12 @@
-export const ITEM_TYPES = ['board', 'list', 'note'] as const
+// Entries hold content. Folders only group entries and other folders.
+export const ENTRY_TYPES = ['board', 'list', 'note'] as const
+export const ITEM_TYPES = [...ENTRY_TYPES, 'folder'] as const
 export const PRIORITIES = ['low', 'medium', 'high'] as const
 export const SORT_MODES = ['manual', 'due', 'priority'] as const
 export const THEMES = ['system', 'light', 'dark', 'black'] as const
 export const TRASH_KINDS = ['item', 'column', 'task'] as const
 
+export type EntryType = (typeof ENTRY_TYPES)[number]
 export type ItemType = (typeof ITEM_TYPES)[number]
 export type Priority = (typeof PRIORITIES)[number]
 export type SortMode = (typeof SORT_MODES)[number]
@@ -12,11 +15,15 @@ export type TrashKind = (typeof TRASH_KINDS)[number]
 
 export interface Item {
   id: number
+  // The folder this item is in, or null on the top level.
+  parentId: number | null
   type: ItemType
   title: string
   icon: string
   color: string
   sortMode: SortMode
+  // Only used by folders: hides the content in the sidebar.
+  collapsed: boolean
 }
 
 export interface Column {
@@ -46,6 +53,7 @@ export interface ItemPatch {
   icon?: string
   color?: string
   sortMode?: SortMode
+  collapsed?: boolean
 }
 
 export interface TaskPatch {
@@ -81,6 +89,13 @@ export interface SearchResult {
   snippet: Snippet | null
 }
 
+// How many tasks an entry has and how many of them are done.
+export interface Progress {
+  itemId: number
+  total: number
+  done: number
+}
+
 export interface Settings {
   theme: Theme
   lastItemId: number | null
@@ -97,10 +112,11 @@ export interface Stats {
 // Everything the renderer can ask the main process to do.
 export interface Api {
   listItems(): Item[]
-  createItem(type: ItemType, title: string): Item
+  createItem(type: ItemType, title: string, parentId: number | null): Item
   updateItem(id: number, patch: ItemPatch): void
-  setItemOrder(orderedIds: number[]): void
-  deleteItem(id: number): void
+  setItemOrder(parentId: number | null, orderedIds: number[]): void
+  // With `keepContent` the content of a folder moves one level up first.
+  deleteItem(id: number, keepContent: boolean): void
 
   getBoard(boardId: number): BoardData
   createColumn(boardId: number, title: string): Column
@@ -113,6 +129,9 @@ export interface Api {
   updateTask(id: number, patch: TaskPatch): void
   setTaskOrder(itemId: number, columnId: number | null, orderedIds: number[]): void
   deleteTask(id: number): void
+  // Open tasks with a due date up to `untilDate`, oldest first.
+  listDueTasks(untilDate: string): Task[]
+  listProgress(): Progress[]
 
   getNote(itemId: number): string
   saveNote(itemId: number, contentJson: string, contentText: string): void
@@ -149,6 +168,8 @@ export const API_METHODS = [
   'updateTask',
   'setTaskOrder',
   'deleteTask',
+  'listDueTasks',
+  'listProgress',
   'getNote',
   'saveNote',
   'search',

@@ -1,4 +1,4 @@
-import type { Priority, Snippet, SortMode, Task } from './types'
+import type { Item, Priority, Snippet, SortMode, Task } from './types'
 
 // Returns a new id list with `id` placed at `toIndex`. Works for moves inside a
 // list and for inserting an id that is not in the list yet.
@@ -17,17 +17,67 @@ export function reorderSubset(allIds: readonly number[], subsetOrder: readonly n
   return allIds.map((id) => (subset.has(id) ? subsetOrder[next++] : id))
 }
 
-// Moves a task into a column at `index` (counted among the other tasks of that
-// column). The position of a task in the array is its order inside its column.
-export function placeTask(tasks: readonly Task[], taskId: number, columnId: number, index: number): Task[] {
-  const task = tasks.find((entry) => entry.id === taskId)
-  if (!task) return [...tasks]
-  const rest = tasks.filter((entry) => entry.id !== taskId)
-  const inColumn = rest.filter((entry) => entry.columnId === columnId)
-  const before = inColumn[Math.max(0, index)]
+// Moves a row into a group at `index` (counted among the other rows of that
+// group). `key` names the field that holds the group: the column of a task or
+// the folder of a sidebar item. The position of a row in the array is its
+// order inside its group.
+export function placeRow<T extends { id: number }, K extends keyof T>(
+  rows: readonly T[],
+  id: number,
+  key: K,
+  group: T[K],
+  index: number
+): T[] {
+  const row = rows.find((entry) => entry.id === id)
+  if (!row) return [...rows]
+  const rest = rows.filter((entry) => entry.id !== id)
+  const inGroup = rest.filter((entry) => entry[key] === group)
+  const before = inGroup[Math.max(0, index)]
   const insertAt = before ? rest.indexOf(before) : rest.length
-  rest.splice(insertAt, 0, { ...task, columnId })
+  rest.splice(insertAt, 0, { ...row, [key]: group })
   return rest
+}
+
+// ---- sidebar tree ----
+
+export interface TreeRow {
+  item: Item
+  depth: number
+}
+
+// The sidebar as a flat list from top to bottom. The content of collapsed
+// folders is left out.
+export function treeRows(items: readonly Item[], parentId: number | null = null, depth = 0): TreeRow[] {
+  return items
+    .filter((item) => item.parentId === parentId)
+    .flatMap((item) => [{ item, depth }, ...(item.collapsed ? [] : treeRows(items, item.id, depth + 1))])
+}
+
+// Everything inside a folder, on all levels.
+export function descendantIds(items: readonly Item[], id: number): number[] {
+  return items
+    .filter((item) => item.parentId === id)
+    .flatMap((child) => [child.id, ...descendantIds(items, child.id)])
+}
+
+export type DropMode = 'before' | 'after' | 'into'
+
+// Where a dragged sidebar item lands: its new folder and its place among the
+// other items there. A target of null means the end of the top level. Returns
+// null when the drop makes no sense, like a folder dropped into itself.
+export function resolveDrop(
+  items: readonly Item[],
+  draggedId: number,
+  targetId: number | null,
+  mode: DropMode
+): { parentId: number | null; index: number } | null {
+  if (targetId === null) return { parentId: null, index: items.length }
+  if (targetId === draggedId || descendantIds(items, draggedId).includes(targetId)) return null
+  const target = items.find((item) => item.id === targetId)
+  if (!target) return null
+  if (mode === 'into') return target.type === 'folder' ? { parentId: target.id, index: items.length } : null
+  const siblings = items.filter((item) => item.parentId === target.parentId && item.id !== draggedId)
+  return { parentId: target.parentId, index: siblings.indexOf(target) + (mode === 'after' ? 1 : 0) }
 }
 
 const PRIORITY_RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 }

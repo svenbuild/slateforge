@@ -15,7 +15,7 @@ import { SortableContext, horizontalListSortingStrategy, useSortable, verticalLi
 import { CSS } from '@dnd-kit/utilities'
 import { Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { moveId, placeTask } from '../../shared/logic'
+import { moveId, placeRow } from '../../shared/logic'
 import type { Column, Task } from '../../shared/types'
 import { api } from './api'
 import { TaskPanel } from './TaskPanel'
@@ -149,13 +149,13 @@ function BoardColumn(props: {
   )
 }
 
-export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }: ViewProps) {
+export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted, onTasksChanged }: ViewProps) {
   const [columns, setColumns] = useState<Column[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [newColumnId, setNewColumnId] = useState<number | null>(null)
-  const { update, remove } = useTaskActions(setTasks, onDeleted)
+  const { update, remove } = useTaskActions(setTasks, onDeleted, onTasksChanged)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const reload = useCallback(async () => {
@@ -187,7 +187,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
     const task = tasks.find((entry) => entry.id === idOf(active.id))
     if (!task) return
     if (isColumn(over.id)) {
-      if (task.columnId !== idOf(over.id)) setTasks(placeTask(tasks, task.id, idOf(over.id), tasks.length))
+      if (task.columnId !== idOf(over.id)) setTasks(placeRow(tasks, task.id, 'columnId', idOf(over.id), tasks.length))
       return
     }
     const overTask = tasks.find((entry) => entry.id === idOf(over.id))
@@ -195,7 +195,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
     const moved = active.rect.current.translated
     const below = moved !== null && moved.top > over.rect.top + over.rect.height / 2
     const index = tasksOf(overTask.columnId).indexOf(overTask) + (below ? 1 : 0)
-    setTasks(placeTask(tasks, task.id, overTask.columnId, index))
+    setTasks(placeRow(tasks, task.id, 'columnId', overTask.columnId, index))
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent): void => {
@@ -214,7 +214,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
     if (over && !isColumn(over.id) && over.id !== active.id) {
       const overTask = tasks.find((entry) => entry.id === idOf(over.id))
       if (overTask && overTask.columnId === task.columnId) {
-        next = placeTask(tasks, task.id, task.columnId, tasksOf(task.columnId).indexOf(overTask))
+        next = placeRow(tasks, task.id, 'columnId', task.columnId, tasksOf(task.columnId).indexOf(overTask))
         setTasks(next)
       }
     }
@@ -231,6 +231,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
   const addTask = async (columnId: number, title: string): Promise<void> => {
     const task = await api.createTask(item.id, columnId, title)
     setTasks((current) => [...current, task])
+    onTasksChanged()
   }
 
   const addColumn = async (): Promise<void> => {
@@ -248,6 +249,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted }:
     await api.deleteColumn(column.id)
     setColumns((current) => current.filter((other) => other.id !== column.id))
     onDeleted({ kind: 'column', id: column.id, title: column.title })
+    onTasksChanged()
   }
 
   return (
