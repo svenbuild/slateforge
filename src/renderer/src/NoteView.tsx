@@ -2,6 +2,7 @@ import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
+import { TableMap } from '@tiptap/pm/tables'
 import { EditorContent, useEditor, useEditorState, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
@@ -155,15 +156,19 @@ function fixColumnWidths(editor: Editor, remembered: number[][]): void {
     const known = remembered[tableIndex] ?? []
     const widths = known.length === onScreen.length ? known : onScreen
     tableIndex += 1
+    // The map knows the real column of every cell. A first row with merged
+    // cells does not show one cell per column, so such a table is left alone.
+    const map = TableMap.get(table)
+    if (onScreen.length !== map.width) return false
     table.forEach((row, rowOffset) => {
-      let column = 0
       row.forEach((cell, cellOffset) => {
+        const inTable = rowOffset + 1 + cellOffset
         const span = (cell.attrs.colspan as number | undefined) ?? 1
+        const column = map.colCount(inTable)
         const own = widths.slice(column, column + span)
         if (!cell.attrs.colwidth && own.length === span && own.every((width) => width > 0)) {
-          change.setNodeMarkup(tablePosition + 1 + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, colwidth: own })
+          change.setNodeMarkup(tablePosition + 1 + inTable, undefined, { ...cell.attrs, colwidth: own })
         }
-        column += span
       })
     })
     return false
@@ -209,6 +214,10 @@ export function TextEditor(props: {
   // loading. Only then a change of the text is the user's and is saved.
   const touched = useRef(false)
 
+  const markTouched = (): void => {
+    touched.current = true
+  }
+
   // Writes unsaved changes. `blocking` is for a closing window, where an
   // async call could get lost.
   const save = (blocking = false): void => {
@@ -216,6 +225,24 @@ export function TextEditor(props: {
     const current = editorRef.current
     if (!dirty.current || !current || locked.current) return
     dirty.current = false
+    const shownBefore = shown.current
+    if (props.layoutKey) {
+      // Column widths of Markdown files are remembered here, not in the
+      // file. If that fails, for example because the store is full, the
+      // text is saved all the same.
+      try {
+        const widths = columnWidths(current)
+        if (widths.length === 0) window.localStorage.removeItem(props.layoutKey)
+        else window.localStorage.setItem(props.layoutKey, JSON.stringify(widths))
+      } catch {
+        // The widths are just not remembered.
+      }
+      // A new column width changes nothing in the Markdown text. Then there
+      // is nothing to write to the file.
+      const markdown = current.getMarkdown()
+      if (markdown === shownBefore) return
+      shown.current = markdown
+    }
     const previous = stored.current
     const saved = source.save(current, blocking, previous)
     stored.current = saved.stored
@@ -223,6 +250,7 @@ export function TextEditor(props: {
       // Still unsaved: the next change or closing the window tries again.
       dirty.current = true
       stored.current = previous
+      shown.current = shownBefore
       throw error
     })
   }
@@ -252,20 +280,12 @@ export function TextEditor(props: {
         return editorRef.current.commands.insertContent(text, { contentType: 'markdown' })
       }
     },
-    onUpdate: ({ editor: current }) => {
-      // Column widths of Markdown files are remembered here, not in the file.
-      if (props.layoutKey) window.localStorage.setItem(props.layoutKey, JSON.stringify(columnWidths(current)))
+    onUpdate: () => {
       // The editor may adjust the text by itself after loading, for example
-      // the layout of a table. Only what follows a click or a key press of
-      // the user, and not the loading itself, is a change to save.
+      // the layout of a table. Only what follows an action of the user (a
+      // click, a key, pasting or dropping something), and not the loading
+      // itself, is a change to save.
       if (!touched.current || loading.current) return
-      // In a Markdown file a new column width changes nothing in the text.
-      // Then there is nothing to write.
-      if (props.layoutKey) {
-        const markdown = current.getMarkdown()
-        if (markdown === shown.current) return
-        shown.current = markdown
-      }
       dirty.current = true
       window.clearTimeout(timer.current)
       timer.current = window.setTimeout(save, SAVE_DELAY_MS)
@@ -332,7 +352,13 @@ export function TextEditor(props: {
   }, [])
 
   return (
-    <div className="editor" onPointerDownCapture={() => (touched.current = true)} onKeyDownCapture={() => (touched.current = true)}>
+    <div
+      className="editor"
+      onPointerDownCapture={markTouched}
+      onKeyDownCapture={markTouched}
+      onPasteCapture={markTouched}
+      onDropCapture={markTouched}
+    >
       {!props.readOnly && !lossy && <Toolbar editor={editor} />}
       {lossy && (
         <p className="editor-notice">
