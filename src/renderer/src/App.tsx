@@ -34,10 +34,9 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [folderToDelete, setFolderToDelete] = useState<Item | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
-  // Counts up when trashed data comes back, so the open view loads again.
+  // Counts up when trashed data comes back or another program changed the
+  // data, so the open view loads again.
   const [version, setVersion] = useState(0)
-  // Counts up when another program (the command line tool) changed the data.
-  const [externalVersion, setExternalVersion] = useState(0)
   // Deletes of this session, newest last. Undo restores the newest one.
   const undoStack = useRef<Deleted[]>([])
   // The newest items for callbacks that are created only once.
@@ -93,7 +92,6 @@ export function App() {
         api.getSettings().then((settings) => applyTheme(settings.theme))
         api.listItems().then(setItems)
         setVersion((current) => current + 1)
-        setExternalVersion((current) => current + 1)
       }),
     []
   )
@@ -209,7 +207,6 @@ export function App() {
   const viewProps: ViewProps | undefined = activeItem && {
     item: activeItem,
     version,
-    externalVersion,
     focusTask,
     onUpdateItem: (patch) => updateItem(activeItem.id, patch),
     onDeleted,

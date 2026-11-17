@@ -82,7 +82,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor(props: { itemId: number; json: string; externalVersion: number }) {
+function NoteEditor(props: { itemId: number; json: string; version: number }) {
   const { itemId } = props
   const initial = parseNote(props.json)
   // What the database holds, as far as this editor knows.
@@ -141,12 +141,14 @@ function NoteEditor(props: { itemId: number; json: string; externalVersion: numb
   })
   editorRef.current = editor
 
-  // Another program changed something. Only when it was this note, and the
+  // The data changed somewhere. Only when it was this note, and the
   // user is not in the middle of typing, the new text replaces the old one.
   useEffect(() => {
     let stale = false
+    const before = stored.current
     api.getNote(itemId).then((json) => {
-      if (stale || dirty.current || json === stored.current) return
+      // A save that happened while waiting makes this answer outdated.
+      if (stale || dirty.current || stored.current !== before || json === before) return
       stored.current = json
       const content = parseNote(json)
       editor.commands.setContent(content ?? '', {
@@ -157,7 +159,7 @@ function NoteEditor(props: { itemId: number; json: string; externalVersion: numb
     return () => {
       stale = true
     }
-  }, [props.externalVersion])
+  }, [props.version])
 
   // Save what the timer did not save yet when the window closes or the note is left.
   useEffect(() => {
@@ -179,7 +181,7 @@ function NoteEditor(props: { itemId: number; json: string; externalVersion: numb
   )
 }
 
-export function NoteView({ item, externalVersion, onUpdateItem }: ViewProps) {
+export function NoteView({ item, version, onUpdateItem }: ViewProps) {
   // Null while the note is loading. The editor only exists with loaded content.
   const [json, setJson] = useState<string | null>(null)
 
@@ -194,7 +196,7 @@ export function NoteView({ item, externalVersion, onUpdateItem }: ViewProps) {
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {json !== null && <NoteEditor itemId={item.id} json={json} externalVersion={externalVersion} />}
+      {json !== null && <NoteEditor itemId={item.id} json={json} version={version} />}
     </div>
   )
 }

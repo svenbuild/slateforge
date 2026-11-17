@@ -37,7 +37,7 @@ img { max-width: 100%; }
 
 // A page of free HTML. AI agents write these for summaries and reports, the
 // user can read them here and change the HTML by hand.
-export function PageView({ item, externalVersion, onUpdateItem }: ViewProps) {
+export function PageView({ item, version, onUpdateItem }: ViewProps) {
   const [html, setHtml] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
 
@@ -50,7 +50,7 @@ export function PageView({ item, externalVersion, onUpdateItem }: ViewProps) {
     return () => {
       stale = true
     }
-  }, [item.id, externalVersion, editing])
+  }, [item.id, version, editing])
 
   const change = (value: string): void => {
     setHtml(value)

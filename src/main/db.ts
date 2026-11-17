@@ -392,10 +392,12 @@ export function createStore(db: DatabaseSync): Store {
     },
 
     deleteItem(itemId, keepContent) {
-      const row = get('SELECT parent_id FROM items WHERE id = ? AND deleted_at IS NULL', id(itemId))
-      if (!row) return
-      const parentId = row.parent_id as number | null
+      id(itemId)
       transaction(db, () => {
+        // Read inside the transaction: another program may just have moved it.
+        const row = get('SELECT parent_id FROM items WHERE id = ? AND deleted_at IS NULL', itemId)
+        if (!row) return
+        const parentId = row.parent_id as number | null
         if (keepContent === true) {
           // The content goes to the end of the level above, in its old order.
           const offset = nextPosition('items', 'parent_id IS ?', parentId)
@@ -522,7 +524,8 @@ export function createStore(db: DatabaseSync): Store {
     },
 
     getNoteText(itemId) {
-      const row = get('SELECT content_text FROM notes WHERE item_id = ?', id(itemId))
+      if (activeItem(id(itemId)).type !== 'note') throw new Error('Not a note')
+      const row = get('SELECT content_text FROM notes WHERE item_id = ?', itemId)
       return (row?.content_text as string | undefined) ?? ''
     },
 
@@ -540,7 +543,8 @@ export function createStore(db: DatabaseSync): Store {
     },
 
     getPage(itemId) {
-      const row = get('SELECT html FROM pages WHERE item_id = ?', id(itemId))
+      if (activeItem(id(itemId)).type !== 'page') throw new Error('Not a page')
+      const row = get('SELECT html FROM pages WHERE item_id = ?', itemId)
       return (row?.html as string | undefined) ?? ''
     },
 

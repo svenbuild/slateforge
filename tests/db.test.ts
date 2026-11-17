@@ -332,6 +332,9 @@ describe('pages', () => {
   it('only saves HTML into pages', () => {
     const note = store.createItem('note', 'N', null)
     expect(() => store.savePage(note.id, '<p>x</p>')).toThrow()
+    expect(() => store.getPage(note.id)).toThrow()
+    expect(() => store.getPage(999)).toThrow()
+    expect(() => store.getNoteText(999)).toThrow()
     const folder = store.createItem('folder', 'F', null)
     expect(store.createPage('Inside', folder.id, '').parentId).toBe(folder.id)
   })
