@@ -1,11 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import iconPath from '../../build/icon.ico?asset'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
 
 // English texts with day-first dates in the built-in date picker.
 app.commandLine.appendSwitch('lang', 'en-GB')
+
+// Lets Windows treat the app as its own program in the taskbar.
+app.setAppUserModelId('com.slateforge.app')
 
 // Tests and the screenshot script use their own data folder.
 if (process.env.SLATEFORGE_DATA_DIR) app.setPath('userData', process.env.SLATEFORGE_DATA_DIR)
@@ -51,6 +55,8 @@ function createWindow(): void {
     minHeight: 520,
     show: false,
     title: 'Slateforge',
+    // Icon in the taskbar, also when the app is started from the source code.
+    icon: iconPath,
     backgroundColor: colors().window,
     // The page draws its own title bar. Windows only adds the window buttons.
     titleBarStyle: 'hidden',

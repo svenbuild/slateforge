@@ -242,6 +242,16 @@ export function Sidebar(props: {
   const [dragId, setDragId] = useState<number | null>(null)
   const [drop, setDrop] = useState<Drop | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  // Where the mouse really is. The drag events only report a distance, and
+  // that distance is wrong once the list has scrolled during a drag.
+  const pointerY = useRef(0)
+  useEffect(() => {
+    const onMove = (event: PointerEvent): void => {
+      pointerY.current = event.clientY
+    }
+    window.addEventListener('pointermove', onMove, true)
+    return () => window.removeEventListener('pointermove', onMove, true)
+  }, [])
   // The menu shows the current state of its item, also after a change.
   const menuItem = menu && items.find((item) => item.id === menu.item.id)
   const dragItem = items.find((item) => item.id === dragId)
@@ -264,13 +274,12 @@ export function Sidebar(props: {
 
   // The upper part of a row means "before it". The rest means "into it" for
   // a folder and "after it" for everything else.
-  const findDrop = ({ active, over, activatorEvent, delta }: DragMoveEvent): Drop | null => {
+  const findDrop = ({ active, over }: Pick<DragMoveEvent, 'active' | 'over'>): Drop | null => {
     if (!over) return null
     let found: Drop = { targetId: null, mode: 'after' }
     if (over.id !== END_ZONE) {
       const target = items.find((item) => item.id === over.id)
-      const pointerY = (activatorEvent as PointerEvent).clientY + delta.y
-      const ratio = (pointerY - over.rect.top) / over.rect.height
+      const ratio = (pointerY.current - over.rect.top) / over.rect.height
       const lower: DropMode = target?.type === 'folder' ? 'into' : 'after'
       found = { targetId: Number(over.id), mode: ratio < (lower === 'into' ? 0.3 : 0.5) ? 'before' : lower }
     }

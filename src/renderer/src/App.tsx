@@ -166,7 +166,8 @@ export function App() {
       current.kind === 'item' && !loaded.some((other) => other.id === current.id) ? { kind: 'overview' } : current
     )
     onDeleted({ kind: 'item', id: item.id, title: item.title })
-    refreshProgress()
+    // Task counts and the overview must forget the tasks that went with it.
+    setVersion((current) => current + 1)
   }
 
   // A folder with content asks first what should happen to the content.
