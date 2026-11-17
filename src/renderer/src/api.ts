@@ -58,16 +58,18 @@ function browserApi(): RendererApi {
   }
 
   const api: Record<string, unknown> = {
-    // The tab may be closing. `keepalive` lets the browser finish the request
-    // (up to about 64 KB, a longer note is saved by the normal timer instead).
-    saveNoteSync: (...args: unknown[]) => void call('saveNote', args, true).catch(() => {}),
+    // The tab may be closing, so this save does not wait in the queue: it is
+    // sent at once. `keepalive` lets the browser finish the request (up to
+    // about 64 KB, a longer note is saved by the normal timer instead).
+    saveNoteSync: (...args: unknown[]) => void request('saveNote', args, true).catch(() => {}),
     onExternalChange: (callback: () => void) => {
       const timer = window.setInterval(async () => {
         try {
           const response = await fetch('/changes', { headers })
-          if (!response.ok) return
+          // Before the first answer of the app there is nothing to compare with.
+          if (!response.ok || seen < 0) return
           const changes = Number(await response.text())
-          if (seen >= 0 && changes > seen) callback()
+          if (changes > seen) callback()
           seen = Math.max(seen, changes)
         } catch {
           // The app was closed. Nothing to load until it runs again.

@@ -122,7 +122,8 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
 
   return new Promise((ready, fail) => {
     const server = createServer((request, response) => {
-      handle(request, response).catch(() => send(response, 500, 'Error'))
+      // If even the error answer cannot be sent, the connection is just closed.
+      handle(request, response).catch(() => response.destroy())
     })
     server.on('error', fail)
     // Port 0 lets Windows pick a free port. 127.0.0.1 keeps other computers out.
