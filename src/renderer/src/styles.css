@@ -366,8 +366,51 @@ kbd {
    window color set by the main process shows through. */
 .app {
   display: flex;
+  flex-direction: column;
   height: 100%;
   background: var(--bg);
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Own title bar. Windows draws the window buttons over its right end. The
+   height is also set in src/main/index.ts. */
+.titlebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0 150px 0 12px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.titlebar img {
+  width: 18px;
+  height: 18px;
+}
+
+.titlebar-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.titlebar .search-button {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: min(340px, calc(100% - 520px));
+  min-width: 190px;
+  transform: translateX(-50%);
+  -webkit-app-region: no-drag;
 }
 
 .main {
@@ -431,22 +474,33 @@ kbd {
   flex-direction: column;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
-  padding: 14px 10px 10px;
+  padding: 10px 10px 10px;
 }
 
-.sidebar-brand {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  padding: 0 8px 12px;
+.sidebar-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 0 0 6px 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-tools .icon-button:first-of-type {
+  margin-left: auto;
 }
 
 .search-button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 13px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
@@ -488,10 +542,60 @@ kbd {
 }
 
 .sidebar-row.dragging {
-  opacity: 0.6;
-  background: var(--hover);
-  z-index: 1;
-  position: relative;
+  opacity: 0.4;
+}
+
+.sidebar-row.overlay {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+}
+
+/* Marks that show where a dragged item will land. */
+.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.drop-into {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.sidebar-row .chevron {
+  flex-shrink: 0;
+  margin: 0 -4px 0 -2px;
+  color: var(--text-faint);
+}
+
+.sidebar-row .count {
+  padding-right: 6px;
+}
+
+.sidebar-row:hover .count {
+  display: none;
+}
+
+.sidebar-end {
+  height: 18px;
+}
+
+.sidebar-empty {
+  padding: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.sidebar-filter {
+  flex-shrink: 0;
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+  background: transparent;
 }
 
 .sidebar-title {
@@ -500,14 +604,14 @@ kbd {
 }
 
 .row-menu {
-  visibility: hidden;
+  display: none;
   width: 24px;
   height: 24px;
 }
 
 .sidebar-row:hover .row-menu,
 .row-menu:focus-visible {
-  visibility: visible;
+  display: inline-flex;
 }
 
 .sidebar-new {
@@ -521,7 +625,21 @@ kbd {
 .sidebar-new .ghost-button {
   flex: 1;
   justify-content: center;
-  padding: 5px 4px;
+  gap: 3px;
+  padding: 5px 2px;
+  font-size: 13px;
+}
+
+.menu-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.menu-add .ghost-button {
+  justify-content: flex-start;
+  padding: 4px 6px;
   font-size: 13px;
 }
 
@@ -537,6 +655,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 9px;
+  flex-shrink: 0;
   height: 32px;
   padding: 0 8px;
   border-radius: 6px;
@@ -1252,6 +1371,148 @@ kbd {
 .empty-text {
   color: var(--text-faint);
   padding: 12px 0;
+}
+
+/* ---- overview ---- */
+
+.overview-body {
+  max-width: 860px;
+}
+
+.overview-body section {
+  padding: 6px 0 22px;
+}
+
+.overview-body h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.overview-date {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.due-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.due-group h3.overdue {
+  color: var(--danger);
+}
+
+.entry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.progress-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.progress-list li:hover {
+  background: var(--hover);
+}
+
+.progress-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-path {
+  margin-left: 10px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.progress-bar {
+  width: 160px;
+  height: 6px;
+  flex-shrink: 0;
+  background: var(--hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.progress-text {
+  width: 96px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- dialog ---- */
+
+.overlay-backdrop.centered {
+  align-items: center;
+  padding-top: 0;
+}
+
+.choice-dialog {
+  width: min(460px, calc(100vw - 40px));
+  padding: 20px 22px 18px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.choice-dialog h2 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+
+.choice-dialog p {
+  color: var(--text-muted);
+}
+
+.choice-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.primary-button.danger {
+  background: var(--danger);
+}
+
+.primary-button.danger:hover {
+  background: var(--danger);
+  filter: brightness(0.92);
 }
 
 /* ---- empty state and toast ---- */

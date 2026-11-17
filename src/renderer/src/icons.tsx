@@ -82,10 +82,10 @@ export const COLORS: Record<string, string> = {
   pink: '#d6409f'
 }
 
-const DEFAULT_ICON: Record<ItemType, string> = { board: 'kanban', list: 'checklist', note: 'note' }
-const DEFAULT_COLOR: Record<ItemType, string> = { board: 'blue', list: 'green', note: 'orange' }
+const DEFAULT_ICON: Record<ItemType, string> = { board: 'kanban', list: 'checklist', note: 'note', folder: 'folder' }
+const DEFAULT_COLOR: Record<ItemType, string> = { board: 'blue', list: 'green', note: 'orange', folder: 'gray' }
 
-export const TYPE_LABEL: Record<ItemType, string> = { board: 'Board', list: 'List', note: 'Note' }
+export const TYPE_LABEL: Record<ItemType, string> = { board: 'Board', list: 'List', note: 'Note', folder: 'Folder' }
 
 export function iconKey(item: Pick<Item, 'type' | 'icon'>): string {
   return ICONS[item.icon] ? item.icon : DEFAULT_ICON[item.type]

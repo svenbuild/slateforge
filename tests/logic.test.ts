@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { makeSnippet, moveId, placeTask, reorderSubset, sortTasks, todayIso } from '../src/shared/logic'
-import type { Task } from '../src/shared/types'
+import {
+  descendantIds,
+  makeSnippet,
+  moveId,
+  placeRow,
+  reorderSubset,
+  resolveDrop,
+  sortTasks,
+  todayIso,
+  treeRows
+} from '../src/shared/logic'
+import type { Item, Task } from '../src/shared/types'
 
 function task(id: number, values: Partial<Task> = {}): Task {
   return {
@@ -50,7 +60,7 @@ describe('reorderSubset', () => {
   })
 })
 
-describe('placeTask', () => {
+describe('placeRow', () => {
   const tasks = [
     task(1, { columnId: 10 }),
     task(2, { columnId: 20 }),
@@ -60,6 +70,8 @@ describe('placeTask', () => {
   ]
   const column = (list: Task[], columnId: number): number[] =>
     list.filter((entry) => entry.columnId === columnId).map((entry) => entry.id)
+  const placeTask = (list: Task[], id: number, columnId: number, index: number): Task[] =>
+    placeRow(list, id, 'columnId', columnId, index)
 
   it('moves a task down and up inside its column', () => {
     expect(column(placeTask(tasks, 1, 10, 2), 10)).toEqual([3, 5, 1])
@@ -80,6 +92,74 @@ describe('placeTask', () => {
 
   it('ignores unknown tasks', () => {
     expect(placeTask(tasks, 99, 10, 0)).toEqual(tasks)
+  })
+})
+
+describe('sidebar tree', () => {
+  const item = (id: number, parentId: number | null, type: Item['type'] = 'list', collapsed = false): Item => ({
+    id,
+    parentId,
+    type,
+    title: `Item ${id}`,
+    icon: '',
+    color: '',
+    sortMode: 'manual',
+    collapsed
+  })
+  // 1 folder          4 folder (collapsed)     7 list
+  //   2 list            5 list
+  //   3 folder
+  //     6 list
+  const items = [
+    item(1, null, 'folder'),
+    item(2, 1),
+    item(3, 1, 'folder'),
+    item(4, null, 'folder', true),
+    item(5, 4),
+    item(6, 3),
+    item(7, null)
+  ]
+
+  it('lists the rows from top to bottom and hides collapsed content', () => {
+    expect(treeRows(items).map((row) => [row.item.id, row.depth])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 1],
+      [6, 2],
+      [4, 0],
+      [7, 0]
+    ])
+  })
+
+  it('finds everything inside a folder', () => {
+    expect(descendantIds(items, 1)).toEqual([2, 3, 6])
+    expect(descendantIds(items, 7)).toEqual([])
+  })
+
+  it('drops before and after an item in the folder of that item', () => {
+    expect(resolveDrop(items, 7, 2, 'before')).toEqual({ parentId: 1, index: 0 })
+    expect(resolveDrop(items, 7, 2, 'after')).toEqual({ parentId: 1, index: 1 })
+    // moving down inside the same folder: the dragged item does not count
+    expect(resolveDrop(items, 2, 3, 'after')).toEqual({ parentId: 1, index: 1 })
+    expect(resolveDrop(items, 6, 1, 'before')).toEqual({ parentId: null, index: 0 })
+  })
+
+  it('drops into a folder at the end, and at the end of the top level', () => {
+    const into = resolveDrop(items, 7, 1, 'into')
+    expect(into?.parentId).toBe(1)
+    const moved = placeRow(items, 7, 'parentId', 1, into?.index ?? 0)
+    expect(moved.filter((entry) => entry.parentId === 1).map((entry) => entry.id)).toEqual([2, 3, 7])
+    const end = resolveDrop(items, 2, null, 'after')
+    const atEnd = placeRow(items, 2, 'parentId', null, end?.index ?? 0)
+    expect(atEnd.filter((entry) => entry.parentId === null).map((entry) => entry.id)).toEqual([1, 4, 7, 2])
+  })
+
+  it('refuses drops that make no sense', () => {
+    expect(resolveDrop(items, 1, 1, 'into')).toBeNull()
+    expect(resolveDrop(items, 1, 3, 'into')).toBeNull()
+    expect(resolveDrop(items, 1, 6, 'before')).toBeNull()
+    expect(resolveDrop(items, 2, 7, 'into')).toBeNull()
+    expect(resolveDrop(items, 2, 99, 'before')).toBeNull()
   })
 })
 

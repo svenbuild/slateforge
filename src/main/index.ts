@@ -1,11 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import iconPath from '../../build/icon.ico?asset'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
 
 // English texts with day-first dates in the built-in date picker.
 app.commandLine.appendSwitch('lang', 'en-GB')
+
+// Lets Windows treat the app as its own program in the taskbar.
+app.setAppUserModelId('com.slateforge.app')
 
 // Tests and the screenshot script use their own data folder.
 if (process.env.SLATEFORGE_DATA_DIR) app.setPath('userData', process.env.SLATEFORGE_DATA_DIR)
@@ -13,16 +17,37 @@ if (process.env.SLATEFORGE_DATA_DIR) app.setPath('userData', process.env.SLATEFO
 const dataFile = join(app.getPath('userData'), 'slateforge.db')
 let mainWindow: BrowserWindow | null = null
 
-// Window color before the page has loaded, so there is no flash on start.
-const WINDOW_COLOR = { light: '#ffffff', dark: '#16171b', black: '#000000' }
+// Colors that the main process paints itself: the window before the page has
+// loaded, and the area of the minimize, maximize and close buttons. The page
+// draws the rest of the title bar, so `bar` matches --bg-sidebar in styles.css.
+const COLORS = {
+  light: { window: '#ffffff', bar: '#f5f5f7', symbols: '#1d1e23' },
+  dark: { window: '#16171b', bar: '#1b1c21', symbols: '#e9eaee' },
+  black: { window: '#000000', bar: '#000000', symbols: '#ededed' }
+}
+// One pixel less than .titlebar in styles.css, so the line below the bar stays visible.
+const TITLE_BAR_HEIGHT = 37
+let theme: Theme = 'system'
 
-// The black theme is a variant of the dark one for the operating system.
-function applyTheme(theme: Theme): void {
-  nativeTheme.themeSource = theme === 'black' ? 'dark' : theme
+function colors(): (typeof COLORS)['dark'] {
+  return COLORS[theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : theme]
 }
 
-function createWindow(theme: Theme): void {
-  const scheme = theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : theme
+function titleBarOverlay(): Electron.TitleBarOverlayOptions {
+  return { color: colors().bar, symbolColor: colors().symbols, height: TITLE_BAR_HEIGHT }
+}
+
+// The black theme is a variant of the dark one for the operating system.
+function applyTheme(next: Theme): void {
+  theme = next
+  nativeTheme.themeSource = next === 'black' ? 'dark' : next
+  mainWindow?.setTitleBarOverlay(titleBarOverlay())
+}
+
+// Windows switched between light and dark while the app follows the system.
+nativeTheme.on('updated', () => mainWindow?.setTitleBarOverlay(titleBarOverlay()))
+
+function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1240,
     height: 800,
@@ -30,7 +55,12 @@ function createWindow(theme: Theme): void {
     minHeight: 520,
     show: false,
     title: 'Slateforge',
-    backgroundColor: WINDOW_COLOR[scheme],
+    // Icon in the taskbar, also when the app is started from the source code.
+    icon: iconPath,
+    backgroundColor: colors().window,
+    // The page draws its own title bar. Windows only adds the window buttons.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: titleBarOverlay(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -52,14 +82,13 @@ function createWindow(theme: Theme): void {
 function start(): void {
   mkdirSync(app.getPath('userData'), { recursive: true })
   const store = createStore(openDatabase(dataFile))
-  const theme = store.getSettings().theme
-  applyTheme(theme)
+  applyTheme(store.getSettings().theme)
 
   const api: Api = {
     ...store,
-    setTheme(theme) {
-      store.setTheme(theme)
-      applyTheme(theme)
+    setTheme(next) {
+      store.setTheme(next)
+      applyTheme(next)
     },
     getDataPath: () => dataFile,
     showDataFolder: () => shell.showItemInFolder(dataFile)
@@ -88,7 +117,7 @@ function start(): void {
   })
 
   Menu.setApplicationMenu(null)
-  createWindow(theme)
+  createWindow()
 }
 
 if (!app.requestSingleInstanceLock()) {

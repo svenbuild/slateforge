@@ -55,12 +55,12 @@ function DoneRow(props: RowProps) {
   )
 }
 
-export function ListView({ item, version, focusTask, onUpdateItem, onDeleted }: ViewProps) {
+export function ListView({ item, version, focusTask, onUpdateItem, onDeleted, onTasksChanged }: ViewProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showDone, setShowDone] = useState(true)
   const [newTitle, setNewTitle] = useState('')
-  const { update, remove } = useTaskActions(setTasks, onDeleted)
+  const { update, remove } = useTaskActions(setTasks, onDeleted, onTasksChanged)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   useEffect(() => {
@@ -90,6 +90,7 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted }: 
     setNewTitle('')
     const task = await api.createTask(item.id, null, title)
     setTasks((current) => [...current, task])
+    onTasksChanged()
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent): void => {

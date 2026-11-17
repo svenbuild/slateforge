@@ -5,7 +5,7 @@ import { api } from './api'
 import { ItemIcon, TYPE_LABEL } from './icons'
 
 function describe(entry: TrashEntry): string {
-  if (entry.kind === 'item') return TYPE_LABEL[entry.context as ItemType]
+  if (entry.kind === 'item') return TYPE_LABEL[entry.context as ItemType] + (entry.hasContent ? ' with content' : '')
   return `${entry.kind === 'task' ? 'Task' : 'Column'} in ${entry.context}`
 }
 
@@ -25,7 +25,8 @@ export function TrashView({ version, onChanged }: { version: number; onChanged: 
   }
 
   const purge = (entry: TrashEntry): void => {
-    if (window.confirm(`Delete "${entry.title}" forever? This cannot be undone.`)) act(api.purge(entry.kind, entry.id))
+    const what = entry.hasContent ? `"${entry.title}" and everything inside it` : `"${entry.title}"`
+    if (window.confirm(`Delete ${what} forever? This cannot be undone.`)) act(api.purge(entry.kind, entry.id))
   }
 
   const empty = (): void => {

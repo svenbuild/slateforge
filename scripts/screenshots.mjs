@@ -47,6 +47,17 @@ function check(condition, message) {
 
 const texts = (selector) => page.locator(selector).allInnerTexts()
 
+// A sidebar row by its exact title.
+const row = (title) => page.locator('.sidebar-row').filter({ has: page.getByText(title, { exact: true }) })
+
+// A date some days from today as YYYY-MM-DD.
+function day(offset) {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 async function drag(from, to, offsetY = 0) {
   const a = await from.boundingBox()
   const b = await to.boundingBox()
@@ -83,7 +94,6 @@ async function setTheme(label) {
 try {
   await launch()
   await setTheme('Dark')
-  await page.locator('.sidebar-brand').click()
 
   // ---- empty app ----
   check((await texts('.empty-state h1'))[0] === 'Welcome to Slateforge' || (await page.locator('.settings-body').count()) === 1, 'app starts empty')
@@ -99,7 +109,7 @@ try {
 
   await page.locator('.card', { hasText: 'Write landing page text' }).click()
   await page.locator('.task-panel .segmented button', { hasText: 'High' }).click()
-  await page.locator('#task-due').fill('2026-11-20')
+  await page.locator('#task-due').fill(day(3))
   await page.locator('#task-description').fill('Short and friendly. Mention the garden workshop and the new prices.')
   await shot('board-with-task-panel-dark')
   await page.keyboard.press('Escape')
@@ -107,7 +117,7 @@ try {
 
   await page.locator('.card', { hasText: 'Choose color palette' }).locator('.check').click()
   await page.locator('.card', { hasText: 'Design new logo' }).click()
-  await page.locator('#task-due').fill('2026-11-10')
+  await page.locator('#task-due').fill(day(-7))
   await page.locator('.task-panel .segmented button', { hasText: 'Low' }).click()
   await page.keyboard.press('Escape')
 
@@ -135,10 +145,10 @@ try {
   await page.locator('.task-row', { hasText: 'Bread' }).locator('.check').click()
   await page.locator('.task-row', { hasText: 'Coffee beans' }).click()
   await page.locator('.task-panel .segmented button', { hasText: 'High' }).click()
-  await page.locator('#task-due').fill('2026-11-18')
+  await page.locator('#task-due').fill(day(1))
   await page.keyboard.press('Escape')
   await page.locator('.task-row', { hasText: 'Apples' }).click()
-  await page.locator('#task-due').fill('2026-11-25')
+  await page.locator('#task-due').fill(day(8))
   await page.keyboard.press('Escape')
   await drag(page.locator('.task-row', { hasText: 'Garden soil' }), page.locator('.task-row', { hasText: 'Milk' }), -8)
   check((await texts('.task-list:first-of-type .task-title'))[0] === 'Garden soil', 'list task dragged to the top')
@@ -271,6 +281,95 @@ try {
   check((await texts('.stat-value')).join() === '1,1,1,9,7', `statistics are correct (${(await texts('.stat-value')).join()})`)
   await shot('settings-dark')
 
+  // ---- folders ----
+  await page.locator('.sidebar-new button[title="New folder"]').click()
+  await page.locator('.sidebar-row input').fill('Home')
+  await page.keyboard.press('Enter')
+  await drag(row('Shopping'), row('Home'))
+  check((await row('Shopping').evaluate((node) => node.style.paddingLeft)) === '24px', 'entry dragged into a folder')
+  check((await row('Home').locator('.count').innerText()) === '3', 'folder shows the open tasks of its content')
+  await row('Home').click()
+  check((await row('Shopping').count()) === 0, 'a click collapses the folder')
+  await row('Home').click()
+  await row('Shopping').waitFor()
+
+  await row('Home').click({ button: 'right' })
+  await page.locator('.menu-add button', { hasText: 'Folder' }).click()
+  await page.locator('.sidebar-row input').fill('Outdoor')
+  await page.keyboard.press('Enter')
+  await drag(row('Garden ideas'), row('Outdoor'))
+  check((await row('Garden ideas').evaluate((node) => node.style.paddingLeft)) === '40px', 'entry dragged into a nested folder')
+  await drag(row('Outdoor'), row('Shopping'), -8)
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Website relaunch,Home,Outdoor,Garden ideas,Shopping', 'folder with content moved before another entry')
+  await drag(row('Home'), row('Outdoor'))
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Website relaunch,Home,Outdoor,Garden ideas,Shopping', 'a folder cannot be dropped into its own content')
+  await drag(row('Website relaunch'), page.locator('.sidebar-end'))
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Home,Outdoor,Garden ideas,Shopping,Website relaunch', 'entry dropped below the last row')
+  check((await row('Website relaunch').evaluate((node) => node.style.paddingLeft)) === '8px', 'that drop puts the entry on the top level')
+  await shot('sidebar-folders-dark')
+
+  await page.locator('.sidebar-tools button[title="Filter entries"]').click()
+  await page.locator('.sidebar-filter').fill('shop')
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Shopping', 'the filter narrows the entries')
+  await shot('sidebar-filter-dark')
+  await page.keyboard.press('Escape')
+  check((await page.locator('.sidebar-filter').count()) === 0 && (await page.locator('.sidebar-row').count()) === 5, 'Escape closes the filter and shows everything again')
+
+  // ---- overview ----
+  await page.locator('.sidebar-tools button[title="Overview"]').click()
+  await page.locator('.due-group').first().waitFor()
+  check((await texts('.due-group h3')).map((text) => text.split('\n')[0]).join() === 'Overdue,Next 7 days', 'overview groups the due tasks')
+  check((await texts('.due-group .task-title')).join() === 'Design new logo,Coffee beans,Write landing page text', 'overview lists due tasks of all boards and lists')
+  check((await texts('.progress-text')).join() === '1 of 4 done,1 of 5 done', `overview shows the progress (${(await texts('.progress-text')).join()})`)
+  await shot('overview-dark')
+  await page.locator('.due-group .task-row', { hasText: 'Coffee beans' }).locator('.check').click()
+  check((await page.locator('.due-group .task-row').count()) === 2, 'a task can be completed on the overview')
+  await row('Home').locator('.count', { hasText: '2' }).waitFor()
+  check(true, 'the counter in the sidebar follows')
+  await page.locator('.due-group .task-row', { hasText: 'Design new logo' }).click()
+  await page.locator('.task-panel').waitFor()
+  check((await texts('.view-header h1'))[0] === 'Website relaunch', 'a click on a due task opens it in its board')
+  await page.keyboard.press('Escape')
+
+  // ---- deleting folders ----
+  await row('Outdoor').click({ button: 'right' })
+  await page.locator('.menu-row.danger').click()
+  await shot('delete-folder-dialog-dark')
+  await page.locator('.choice-dialog button', { hasText: 'Keep content' }).click()
+  await row('Outdoor').waitFor({ state: 'detached' })
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Home,Shopping,Garden ideas,Website relaunch', 'folder deleted, its content moved one level up')
+
+  await page.locator('.sidebar-new button[title="New folder"]').click()
+  await page.locator('.sidebar-row input').fill('Temp')
+  await page.keyboard.press('Enter')
+  await row('Temp').click({ button: 'right' })
+  await page.locator('.menu-add button', { hasText: 'Note' }).click()
+  await page.locator('.sidebar-row input').fill('Temp note')
+  await page.keyboard.press('Enter')
+  await row('Temp').click({ button: 'right' })
+  await page.locator('.menu-row.danger').click()
+  await page.locator('.choice-dialog button', { hasText: 'Delete content too' }).click()
+  await row('Temp').waitFor({ state: 'detached' })
+  check((await row('Temp note').count()) === 0 && (await row('Temp').count()) === 0, 'folder deleted together with its content')
+  check((await page.locator('.overview-body').count()) === 1, 'the overview opens when the open entry was deleted')
+  // deleting an entry while the overview is open removes its due tasks there
+  await row('Website relaunch').click({ button: 'right' })
+  await page.locator('.menu-row.danger').click()
+  await page.locator('.due-group').first().waitFor({ state: 'detached' })
+  check(true, 'due tasks of a deleted board leave the overview')
+  await page.keyboard.press('Control+Z')
+  await page.locator('.column').first().waitFor()
+  await page.locator('.sidebar-tools button[title="Overview"]').click()
+  await page.locator('.due-group .task-row', { hasText: 'Design new logo' }).waitFor()
+  check(true, 'Undo brings the board and its due tasks back')
+  await page.keyboard.press('Control+Z')
+  await row('Temp note').waitFor()
+  check(true, 'a second Undo brings the folder and its content back')
+  await row('Temp').click({ button: 'right' })
+  await page.locator('.menu-row.danger').click()
+  await page.locator('.choice-dialog button', { hasText: 'Delete content too' }).click()
+  await row('Temp').waitFor({ state: 'detached' })
+
   // ---- black theme ----
   await setTheme('Black')
   await shot('settings-black')
@@ -317,7 +416,7 @@ try {
   await page.locator('.note-content h1').waitFor()
   check((await texts('.view-header h1'))[0] === 'Garden ideas', 'the last used entry opens after a restart')
   check((await page.locator('.note-content').innerText()).includes('Typed right before closing'), 'text typed right before closing was saved')
-  check((await texts('.sidebar-row .sidebar-title')).join() === 'Garden ideas,Website relaunch,Shopping', 'entries and their order survive a restart')
+  check((await texts('.sidebar-row .sidebar-title')).join() === 'Home,Shopping,Garden ideas,Website relaunch', 'folders, entries and their order survive a restart')
   await page.locator('.sidebar-row', { hasText: 'Website relaunch' }).click()
   await page.locator('.column').first().waitFor()
   check((await texts('.column-header .inline-text')).join() === 'Done,To do,In progress,Review', 'columns and their order survive a restart')

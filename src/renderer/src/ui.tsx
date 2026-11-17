@@ -20,6 +20,8 @@ export interface ViewProps {
   focusTask: { taskId: number } | null
   onUpdateItem: (patch: ItemPatch) => void
   onDeleted: (deleted: Deleted) => void
+  // Called when the number of open tasks may have changed.
+  onTasksChanged: () => void
 }
 
 // Light and dark follow the color scheme that the main process sets. The
@@ -107,6 +109,50 @@ export function ViewHeader({ item, onUpdateItem, children }: Pick<ViewProps, 'it
   )
 }
 
+// Small window in the middle of the screen with a question and a few answers.
+// Escape or a click next to it cancels.
+export function ChoiceDialog(props: {
+  title: string
+  text: string
+  choices: { label: string; danger?: boolean; onChoose: () => void }[]
+  onCancel: () => void
+}) {
+  const { onCancel } = props
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onCancel()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onCancel])
+
+  return (
+    <div className="overlay-backdrop centered" onMouseDown={onCancel}>
+      <div className="choice-dialog" role="dialog" aria-label={props.title} onMouseDown={(event) => event.stopPropagation()}>
+        <h2>{props.title}</h2>
+        <p>{props.text}</p>
+        <div className="choice-buttons">
+          <button type="button" className="ghost-button" onClick={onCancel}>
+            Cancel
+          </button>
+          {props.choices.map((choice) => (
+            <button
+              key={choice.label}
+              type="button"
+              className={choice.danger ? 'primary-button danger' : 'primary-button'}
+              onClick={choice.onChoose}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
   return (
     <button
@@ -182,15 +228,21 @@ export function useScrollToSelected(selectedId: number | null, loaded: boolean):
 }
 
 // Change and delete tasks in the local state and in the database.
-export function useTaskActions(setTasks: Dispatch<SetStateAction<Task[]>>, onDeleted: (deleted: Deleted) => void) {
+export function useTaskActions(
+  setTasks: Dispatch<SetStateAction<Task[]>>,
+  onDeleted: (deleted: Deleted) => void,
+  onTasksChanged: () => void
+) {
   const update = (id: number, patch: TaskPatch): void => {
     setTasks((tasks) => tasks.map((task) => (task.id === id ? { ...task, ...patch } : task)))
     api.updateTask(id, patch)
+    if (patch.done !== undefined) onTasksChanged()
   }
   const remove = async (task: Task): Promise<void> => {
     await api.deleteTask(task.id)
     setTasks((tasks) => tasks.filter((other) => other.id !== task.id))
     onDeleted({ kind: 'task', id: task.id, title: task.title })
+    onTasksChanged()
   }
   return { update, remove }
 }
