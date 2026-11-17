@@ -2,8 +2,7 @@ import { Check, ExternalLink, Flag } from 'lucide-react'
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { makeSnippet, todayIso } from '../../shared/logic'
 import type { Item, ItemPatch, Task, TaskPatch, Theme, TrashKind } from '../../shared/types'
-import { api } from './api'
-import { pageDocument } from './export'
+import { api, inBrowser } from './api'
 import { ItemIcon } from './icons'
 
 export interface Deleted {
@@ -93,14 +92,7 @@ export function InlineEdit(props: {
 }
 
 // Title bar above a board, list or note. The title can be renamed with a double click.
-// `exportBody` returns the content as HTML for the "open in browser" button.
-// It is missing while the content is still loading.
-export function ViewHeader({
-  item,
-  onUpdateItem,
-  exportBody,
-  children
-}: Pick<ViewProps, 'item' | 'onUpdateItem'> & { exportBody: (() => string) | null; children?: ReactNode }) {
+export function ViewHeader({ item, onUpdateItem, children }: Pick<ViewProps, 'item' | 'onUpdateItem'> & { children?: ReactNode }) {
   const [editing, setEditing] = useState(false)
   return (
     <header className="view-header">
@@ -115,15 +107,11 @@ export function ViewHeader({
       </h1>
       <div className="view-header-actions">
         {children}
-        <button
-          type="button"
-          className="icon-button"
-          title="Open in browser"
-          disabled={!exportBody}
-          onClick={() => exportBody && api.openInBrowser(item.title, pageDocument(item.title, exportBody()))}
-        >
-          <ExternalLink size={15} />
-        </button>
+        {!inBrowser && (
+          <button type="button" className="icon-button" title="Open in browser" onClick={() => api.openInBrowser(item.id)}>
+            <ExternalLink size={15} />
+          </button>
+        )}
       </div>
     </header>
   )

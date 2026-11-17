@@ -73,7 +73,10 @@ export function App() {
     Promise.all([api.listItems(), api.getSettings()]).then(([loaded, settings]) => {
       applyTheme(settings.theme)
       setItems(loaded)
-      if (settings.lastItemId !== null) openItem(settings.lastItemId, null, loaded)
+      // A browser tab is opened on one entry, given in the address as #item=12.
+      const linked = Number(new URLSearchParams(window.location.hash.slice(1)).get('item'))
+      const startId = loaded.some((item) => item.id === linked) ? linked : settings.lastItemId
+      if (startId !== null) openItem(startId, null, loaded)
     })
   }, [openItem])
 

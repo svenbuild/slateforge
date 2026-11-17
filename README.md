@@ -28,8 +28,11 @@ computer: no cloud, no account.
 - **Pages** hold free HTML, for summaries, overviews and reports. You can
   edit the HTML in the app. All pages share one house style, defined in
   `assets/page-style.html`.
-- **Open in browser**: a small button in the header opens any board, list,
-  note or page as an HTML file in your browser.
+- **Open in browser**: a small button in the header opens the whole app in
+  your browser, on the current entry. Everything works there as in the app,
+  and both sides show each other's changes within about a second. For this
+  the app starts a small web server with the first click. It only listens on
+  this computer (127.0.0.1) and needs the secret key in the address.
 - **Pin** entries to keep them at the top of the sidebar.
 - **Command line tool** for scripts and AI agents, see below.
 - **Own title bar** with the search in the middle.

@@ -456,29 +456,56 @@ try {
   check(true, 'an entry deleted by the tool leaves the sidebar')
   check(cli('tree').includes('page  Agent report'), 'the tool lists everything with ids')
 
-  // ---- open in browser, for every kind of entry ----
-  // Catch the call that would open the real browser during this test.
-  await app.evaluate(({ shell }) => {
-    shell.openPath = async (path) => {
-      globalThis.openedPath = path
-      return ''
-    }
-  })
-  const openInBrowser = async (title) => {
-    await row(title).click()
-    await page.locator('.view-header button[title="Open in browser"]').click()
-    await page.waitForFunction(() => true)
-    await page.waitForTimeout(300)
-    return readFileSync(await app.evaluate(() => globalThis.openedPath), 'utf8')
-  }
-  const pageFile = await openInBrowser('Agent report')
-  check(pageFile.includes('Changed by hand') && pageFile.includes('Content-Security-Policy'), 'a page opens in the browser as a locked HTML file')
-  const boardFile = await openInBrowser('Website relaunch')
-  check(boardFile.includes('class="col"') && boardFile.includes('Write landing page text'), 'a board opens in the browser with its columns and tasks')
-  const listFile = await openInBrowser('Shopping')
-  check(listFile.includes('Garden soil') && listFile.includes('Completed'), 'a list opens in the browser with open and completed tasks')
-  const noteFile = await openInBrowser('Garden ideas')
-  check(noteFile.includes('class="prose"') && noteFile.includes('Spring plan'), 'a note opens in the browser with its formatted text')
+  // ---- the whole app in the browser ----
+  // shell.openExternal is still caught from the link test above, so no real browser opens.
+  await row('Shopping').click()
+  await page.locator('.view-header button[title="Open in browser"]').click()
+  await page.waitForTimeout(700)
+  const webUrl = await app.evaluate(() => globalThis.openedUrl)
+  check(/^http:\/\/127\.0\.0\.1:\d+\/\?key=[0-9a-f]+#item=\d+$/.test(webUrl), 'the browser button starts a server on this computer and opens an address with a key')
+  const origin = new URL(webUrl).origin
+  check((await app.evaluate(async (_, url) => (await fetch(url)).status, origin + '/')) === 403, 'without the key the server refuses')
+
+  // A second plain window stands in for the browser: it has no direct line to the app.
+  const [web] = await Promise.all([
+    app.waitForEvent('window'),
+    app.evaluate(({ BrowserWindow }, url) => {
+      new BrowserWindow({ width: 1100, height: 760 }).loadURL(url)
+    }, webUrl)
+  ])
+  web.on('pageerror', (error) => console.log('[browser crash]', error.message))
+  await web.waitForSelector('.sidebar')
+  await web.locator('.task-row').first().waitFor()
+  check((await web.locator('.view-header h1').innerText()) === 'Shopping', 'the browser shows the app, opened on the same entry')
+  check((await web.locator('.view-header button[title="Open in browser"]').count()) === 0, 'inside the browser there is no browser button')
+
+  await web.locator('.task-row', { hasText: 'Garden soil' }).locator('.check').click()
+  await page.locator('.task-row.done', { hasText: 'Garden soil' }).waitFor()
+  check(true, 'a task ticked in the browser is ticked in the app')
+  await page.locator('.add-task input').fill('Added in the app')
+  await page.keyboard.press('Enter')
+  await web.locator('.task-row', { hasText: 'Added in the app' }).waitFor()
+  check(true, 'a task added in the app shows up in the browser')
+  await web.locator('.add-task input').fill('Added in the browser')
+  await web.keyboard.press('Enter')
+  await page.locator('.task-row', { hasText: 'Added in the browser' }).waitFor()
+  check(true, 'a task added in the browser shows up in the app')
+
+  await web.locator('.sidebar-row', { hasText: 'Agent report' }).click()
+  await web.frameLocator('.page-frame').locator('h1').waitFor()
+  check(true, 'an HTML page is shown in the browser too')
+  await web.locator('.sidebar-row', { hasText: 'Garden ideas' }).click()
+  await web.locator('.note-content').click()
+  await web.keyboard.press('Control+End')
+  await web.keyboard.type('Typed in the browser')
+  await row('Garden ideas').click()
+  await page.locator('.note-content', { hasText: 'Typed in the browser' }).waitFor()
+  check(true, 'text typed into a note in the browser reaches the app')
+  await web.locator('.sidebar-row', { hasText: 'Website relaunch' }).click()
+  await web.locator('.column').first().waitFor()
+  await web.waitForTimeout(250)
+  await web.screenshot({ path: join(outDir, 'browser-view.png') })
+  await web.close()
 
   // ---- pinning ----
   await row('Shopping').click({ button: 'right' })

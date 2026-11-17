@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import iconPath from '../../build/icon.ico?asset'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
+import { startWebServer, type WebServer } from './web'
 
 // English texts with day-first dates in the built-in date picker.
 app.commandLine.appendSwitch('lang', 'en-GB')
@@ -95,6 +96,9 @@ function start(): void {
   const readVersion = db.prepare('PRAGMA data_version')
   const dataVersion = (): unknown => readVersion.get()?.data_version
   let seenVersion = dataVersion()
+  // Grows with every change of the data, whoever made it: the app window, a
+  // browser tab or the command line tool. Browser tabs watch this number.
+  let changes = 0
   setInterval(() => {
     try {
       const version = dataVersion()
@@ -103,6 +107,7 @@ function start(): void {
       applyTheme(store.getSettings().theme)
       mainWindow?.webContents.send('external-change')
       seenVersion = version
+      changes += 1
     } catch (error) {
       // For example the file is locked for a long time. The next round tries again.
       console.error(error)
@@ -118,19 +123,33 @@ function start(): void {
     },
     getDataPath: () => dataFile,
     showDataFolder: () => shell.showItemInFolder(dataFile),
-    openInBrowser(title, html) {
-      if (typeof title !== 'string' || typeof html !== 'string') throw new Error('Invalid page')
-      // One file per title, in a folder next to the data file.
-      const folder = join(app.getPath('userData'), 'browser')
-      mkdirSync(folder, { recursive: true })
-      // The fixed start keeps names like CON or NUL from being a Windows device.
-      const name = title.replace(/[^\p{L}\p{M}\p{N} _-]+/gu, '_').trim().slice(0, 60)
-      const file = join(folder, `slateforge ${name}.html`)
-      writeFileSync(file, html)
-      shell.openPath(file).then((problem) => {
-        if (problem) dialog.showErrorBox('The page could not be opened in the browser', problem)
-      })
+    openInBrowser(itemId) {
+      if (!Number.isInteger(itemId)) throw new Error('Invalid id')
+      // The web server only starts with the first use of this button.
+      webServer ??= startWebServer({ root: join(__dirname, '../renderer'), call: callFromBrowser, changes: () => changes })
+      webServer.then(
+        (server) => shell.openExternal(server.address(itemId)),
+        (error) => dialog.showErrorBox('The browser view could not be started', String(error))
+      )
     }
+  }
+  let webServer: Promise<WebServer> | undefined
+
+  // Reading, and remembering the last opened entry, change nothing others must load.
+  const changesData = (method: string): boolean => !/^(list|get|search|setLastItem|showDataFolder|openInBrowser)/.test(method)
+
+  const run = (method: string, args: unknown[]): unknown => {
+    if (!(API_METHODS as readonly string[]).includes(method)) throw new Error('Unknown method')
+    const result = (api[method as keyof Api] as (...values: unknown[]) => unknown)(...args)
+    if (changesData(method)) changes += 1
+    return result
+  }
+
+  // A call from a browser tab. The app window then loads the change.
+  const callFromBrowser = (method: string, args: unknown[]): unknown => {
+    const result = run(method, args)
+    if (changesData(method)) mainWindow?.webContents.send('external-change')
+    return result
   }
 
   // Only the app window may use the API.
@@ -138,17 +157,16 @@ function start(): void {
     if (sender !== mainWindow?.webContents) throw new Error('Unknown sender')
   }
   for (const method of API_METHODS) {
-    const handler = api[method] as (...args: unknown[]) => unknown
     ipcMain.handle(`api:${method}`, (event, ...args) => {
       checkSender(event.sender)
-      return handler(...args)
+      return run(method, args)
     })
   }
   // Used while the window closes, when an async call could get lost.
   ipcMain.on('api:saveNoteSync', (event, itemId, contentJson, contentText) => {
     try {
       checkSender(event.sender)
-      store.saveNote(itemId, contentJson, contentText)
+      run('saveNote', [itemId, contentJson, contentText])
     } catch (error) {
       console.error(error)
     }

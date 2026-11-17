@@ -165,8 +165,8 @@ export interface Api {
 
   getDataPath(): string
   showDataFolder(): void
-  // Writes the HTML to a file and opens it in the normal browser.
-  openInBrowser(title: string, html: string): void
+  // Opens the app in the normal browser, on the given entry.
+  openInBrowser(itemId: number): void
 }
 
 export const API_METHODS = [
