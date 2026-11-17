@@ -29,6 +29,7 @@ Look around
   getNoteText <noteId>                       text of a note
   getPage <pageId>                           HTML of a page
   getStats                                   counts
+  where                                      path of the data file
 
 Pages (HTML, for summaries, overviews, reports and results)
   createPage <title> <folderId|null> <html>  usually with @file for the HTML

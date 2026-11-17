@@ -324,9 +324,18 @@ describe('pages', () => {
     expect(store.getPage(page.id)).toContain('<h1>Sales</h1>')
     expect(store.search('revenue went up')).toMatchObject([{ itemId: page.id, snippet: { match: 'Revenue went up' } }])
     expect(store.search('color')).toEqual([])
+    const other = store.createPage('Codes', null, '<p>R&amp;D&nbsp;plan</p>')
+    expect(store.search('r&d plan')).toMatchObject([{ itemId: other.id }])
+    store.deleteItem(other.id, false)
     store.savePage(page.id, '<p>New text</p>')
     expect(store.getPage(page.id)).toBe('<p>New text</p>')
     expect(store.getStats().pages).toBe(1)
+  })
+
+  it('creates nothing when the content is refused', () => {
+    expect(() => store.createPage('Bad', null, 5 as never)).toThrow()
+    expect(() => store.createNote('Bad', 999, 'text')).toThrow()
+    expect(store.listItems()).toEqual([])
   })
 
   it('only saves HTML into pages', () => {

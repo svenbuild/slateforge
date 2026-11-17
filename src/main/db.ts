@@ -153,6 +153,9 @@ const ACTIVE_TASKS = `
   WHERE t.deleted_at IS NULL
     AND (t.column_id IS NULL OR c.deleted_at IS NULL)`
 
+// The few HTML codes that matter for the search text of a page.
+const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", nbsp: ' ' }
+
 const TABLES: Record<TrashKind, string> = { item: 'items', column: 'columns', task: 'tasks' }
 
 export function openDatabase(file: string): DatabaseSync {
@@ -172,7 +175,9 @@ export function openDatabase(file: string): DatabaseSync {
 
 // Takes the write lock at the start. The app and the command line tool can
 // then wait for each other instead of failing in the middle of a change.
+// Inside a running transaction the work simply joins it.
 function transaction(db: DatabaseSync, work: () => void): void {
+  if (db.isTransaction) return work()
   db.exec('BEGIN IMMEDIATE')
   try {
     work()
@@ -554,6 +559,7 @@ export function createStore(db: DatabaseSync): Store {
       const plain = text(html, MAX_NOTE)
         .replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, ' ')
         .replace(/<[^>]+>/g, ' ')
+        .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, name: string) => HTML_ENTITIES[name])
         .replace(/\s+/g, ' ')
         .trim()
       transaction(db, () => {
@@ -702,6 +708,19 @@ export function createStore(db: DatabaseSync): Store {
         tasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS}`),
         openTasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS} AND t.done = 0`)
       }
+    }
+  }
+
+  // Every command runs as one transaction. Its checks and its writes then see
+  // the same data, also while another program writes to the file.
+  for (const name of Object.keys(store) as (keyof Store)[]) {
+    const command = store[name] as (...args: unknown[]) => unknown
+    ;(store as Record<string, unknown>)[name] = (...args: unknown[]): unknown => {
+      let result: unknown
+      transaction(db, () => {
+        result = command(...args)
+      })
+      return result
     }
   }
   return store
