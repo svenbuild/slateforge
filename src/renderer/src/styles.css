@@ -189,6 +189,12 @@ kbd {
   flex-shrink: 0;
 }
 
+.icon-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .icon-button:hover {
   background: var(--hover);
   color: var(--text);

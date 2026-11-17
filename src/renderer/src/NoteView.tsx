@@ -199,7 +199,7 @@ export function NoteView({ item, version, onUpdateItem }: ViewProps) {
 
   return (
     <div className="view">
-      <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={() => noteBody(item.title, htmlRef.current())} />
+      <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={json === null ? null : () => noteBody(item.title, htmlRef.current())} />
       {json !== null && <NoteEditor itemId={item.id} json={json} version={version} htmlRef={htmlRef} />}
     </div>
   )

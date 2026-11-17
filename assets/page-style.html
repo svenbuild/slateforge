@@ -19,6 +19,9 @@
   --soft: #d6d6d6;
   --muted: #8c8c8c;
   --line: #2b2b2b;
+  /* Names that older pages use. */
+  --border: var(--line);
+  --surface: #111111;
   --accent: #f5a524;
   --bad: #ef4444;
   --good: #4ade80;
@@ -58,6 +61,7 @@ h1 + p { margin-top: 24px; }
 .chips:first-child { margin-top: 0; }
 strong, b { color: var(--text); }
 a { color: var(--text); text-underline-offset: 3px; }
+img { max-width: 100%; }
 hr { margin: 40px 0; border: none; border-top: 1px solid var(--line); }
 code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
 pre { margin: 20px 0 0; padding: 14px 16px; border: 1px solid var(--line); overflow-x: auto; }

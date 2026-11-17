@@ -11,9 +11,11 @@ export function escapeHtml(text: string): string {
 
 // A complete HTML document in the house style. The rule in the head lets it
 // use nothing but its own styles and embedded images: no scripts, no files,
-// nothing from the internet. Links open in a new window.
+// no forms, nothing from the internet. Links open in a new window. A page
+// must not send the reader somewhere by itself either, so that tag is removed.
 export function pageDocument(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><base target="_blank"><title>${escapeHtml(title)}</title><style>${PAGE_CSS}</style></head><body>${body}</body></html>`
+  const safeBody = body.replace(/<meta\b[^>]*http-equiv[^>]*>/gi, '')
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'"><base target="_blank"><title>${escapeHtml(title)}</title><style>${PAGE_CSS}</style></head><body>${safeBody}</body></html>`
 }
 
 function taskCard(task: Task): string {

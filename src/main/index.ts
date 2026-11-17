@@ -123,10 +123,13 @@ function start(): void {
       // One file per title, in a folder next to the data file.
       const folder = join(app.getPath('userData'), 'browser')
       mkdirSync(folder, { recursive: true })
-      const name = title.replace(/[^\p{L}\p{N} _-]+/gu, '_').trim().slice(0, 60) || 'page'
-      const file = join(folder, `${name}.html`)
+      // The fixed start keeps names like CON or NUL from being a Windows device.
+      const name = title.replace(/[^\p{L}\p{M}\p{N} _-]+/gu, '_').trim().slice(0, 60)
+      const file = join(folder, `slateforge ${name}.html`)
       writeFileSync(file, html)
-      shell.openPath(file)
+      shell.openPath(file).then((problem) => {
+        if (problem) dialog.showErrorBox('The page could not be opened in the browser', problem)
+      })
     }
   }
 

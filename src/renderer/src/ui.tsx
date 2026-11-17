@@ -94,12 +94,13 @@ export function InlineEdit(props: {
 
 // Title bar above a board, list or note. The title can be renamed with a double click.
 // `exportBody` returns the content as HTML for the "open in browser" button.
+// It is missing while the content is still loading.
 export function ViewHeader({
   item,
   onUpdateItem,
   exportBody,
   children
-}: Pick<ViewProps, 'item' | 'onUpdateItem'> & { exportBody: () => string; children?: ReactNode }) {
+}: Pick<ViewProps, 'item' | 'onUpdateItem'> & { exportBody: (() => string) | null; children?: ReactNode }) {
   const [editing, setEditing] = useState(false)
   return (
     <header className="view-header">
@@ -118,7 +119,8 @@ export function ViewHeader({
           type="button"
           className="icon-button"
           title="Open in browser"
-          onClick={() => api.openInBrowser(item.title, pageDocument(item.title, exportBody()))}
+          disabled={!exportBody}
+          onClick={() => exportBody && api.openInBrowser(item.title, pageDocument(item.title, exportBody()))}
         >
           <ExternalLink size={15} />
         </button>
