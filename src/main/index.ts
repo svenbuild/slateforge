@@ -96,12 +96,17 @@ function start(): void {
   const dataVersion = (): unknown => readVersion.get()?.data_version
   let seenVersion = dataVersion()
   setInterval(() => {
-    const version = dataVersion()
-    if (version === seenVersion) return
-    seenVersion = version
-    // The change may have been the theme.
-    applyTheme(store.getSettings().theme)
-    mainWindow?.webContents.send('external-change')
+    try {
+      const version = dataVersion()
+      if (version === seenVersion) return
+      // The change may have been the theme.
+      applyTheme(store.getSettings().theme)
+      mainWindow?.webContents.send('external-change')
+      seenVersion = version
+    } catch (error) {
+      // For example the file is locked for a long time. The next round tries again.
+      console.error(error)
+    }
   }, 1000)
   applyTheme(store.getSettings().theme)
 

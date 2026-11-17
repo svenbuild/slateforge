@@ -183,7 +183,8 @@ function transaction(db: DatabaseSync, work: () => void): void {
     work()
     db.exec('COMMIT')
   } catch (error) {
-    db.exec('ROLLBACK')
+    // After some errors SQLite has already ended the transaction by itself.
+    if (db.isTransaction) db.exec('ROLLBACK')
     throw error
   }
 }

@@ -60,7 +60,7 @@ export function PageView({ item, version, onUpdateItem }: ViewProps) {
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem}>
-        <button type="button" className="ghost-button" onClick={() => setEditing(!editing)}>
+        <button type="button" className="ghost-button" disabled={html === null} onClick={() => setEditing(!editing)}>
           {editing ? <Eye size={15} /> : <Code size={15} />}
           {editing ? 'Show page' : 'Edit HTML'}
         </button>
