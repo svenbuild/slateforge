@@ -18,7 +18,8 @@ let counter = 0
 
 async function launch() {
   app = await electron.launch({
-    args: [join(import.meta.dirname, '..')],
+    // Set SLATEFORGE_EXE to test a packaged Slateforge.exe instead of the build in ./out.
+    ...(process.env.SLATEFORGE_EXE ? { executablePath: process.env.SLATEFORGE_EXE, args: [] } : { args: [join(import.meta.dirname, '..')] }),
     env: { ...process.env, SLATEFORGE_DATA_DIR: dataDir },
     // Do not let the test tool force a light design.
     colorScheme: null

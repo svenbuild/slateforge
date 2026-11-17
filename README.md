@@ -1,5 +1,63 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# slateforge
+# Slateforge
 
-Created in [T3 Code](https://t3.codes).
+A Windows desktop app to organize tasks and notes. All data stays on your
+computer: no cloud, no account.
+
+## Features
+
+- **Sidebar** with boards, lists and notes. Each entry has its own icon and
+  color, can be renamed in place (double click or F2) and reordered by drag and
+  drop. The app opens the entry you used last.
+- **Boards**: kanban columns and tasks, both movable by drag and drop.
+- **Lists**: checkable tasks, sorted manually, by due date or by priority.
+  Completed tasks are shown separately.
+- **Tasks**: title, description, priority, due date and done state, edited in
+  a side panel.
+- **Notes**: editor with live formatting (`# ` heading, `- ` list, `[ ] `
+  checklist). Pasted Markdown text is formatted automatically.
+- **Search** over everything with `Ctrl+K`, usable with the keyboard only.
+- **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
+  button brings back the last deleted thing.
+- **Settings**: light, dark or system design, statistics and the location of
+  the data file.
+
+## Run from source
+
+Needs [Node.js](https://nodejs.org) 22 or newer.
+
+```
+npm install
+npx install-electron   # downloads the Electron program once
+npm run dev            # start with live reload
+```
+
+Other commands:
+
+| Command               | What it does                                             |
+| --------------------- | -------------------------------------------------------- |
+| `npm test`            | Unit tests for the database and the ordering logic       |
+| `npm run typecheck`   | TypeScript check                                         |
+| `npm run build`       | Build the app into `out/`                                |
+| `npm start`           | Start the built app                                      |
+| `npm run screenshots` | Click through the built app and save screenshots         |
+| `npm run package`     | Create `dist/Slateforge-win32-x64/Slateforge.exe`        |
+
+The packaged folder can be copied anywhere. Start `Slateforge.exe` inside it.
+
+## Where the data lives
+
+One SQLite file: `%APPDATA%\Slateforge\slateforge.db` (the exact path is shown
+in the settings). Copy this file to make a backup.
+
+## Code overview
+
+| Path              | Content                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| `src/main`        | Electron main process: window, database (`db.ts`)             |
+| `src/preload`     | Bridge that gives the window access to the API                |
+| `src/shared`      | Types and pure logic used on both sides (`logic.ts`)          |
+| `src/renderer`    | The user interface (React)                                    |
+| `tests`           | Unit tests                                                    |
+| `scripts`         | Screenshot click-through, packaging, icon generation          |
