@@ -71,9 +71,9 @@ export function App() {
     Promise.all([api.listItems(), api.getSettings()]).then(([loaded, settings]) => {
       applyTheme(settings.theme)
       setItems(loaded)
-      if (settings.lastItemId !== null) setView({ kind: 'item', id: settings.lastItemId })
+      if (settings.lastItemId !== null) openItem(settings.lastItemId, null, loaded)
     })
-  }, [])
+  }, [openItem])
 
   useEffect(refreshProgress, [refreshProgress, version])
 

@@ -70,6 +70,8 @@ export interface TrashEntry {
   title: string
   context: string
   deletedAt: string
+  // True for a folder that still has something inside.
+  hasContent: boolean
 }
 
 export interface Snippet {

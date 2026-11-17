@@ -330,6 +330,8 @@ export function createStore(db: DatabaseSync): Store {
     setItemOrder(parentId, orderedIds) {
       checkParent(idOrNull(parentId))
       const ids = idList(orderedIds)
+      // Trashed items stay where they are.
+      ids.forEach(activeItem)
       // A folder must not end up inside itself.
       for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
         if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
@@ -532,14 +534,16 @@ export function createStore(db: DatabaseSync): Store {
     // trashed parent come back together with that parent.
     listTrash() {
       const rows = all(
-        `SELECT 'item' AS kind, id, title, type AS context, deleted_at FROM items
+        `SELECT 'item' AS kind, id, title, type AS context, deleted_at,
+           EXISTS (SELECT 1 FROM items child WHERE child.parent_id = items.id) AS has_content
+         FROM items
          WHERE deleted_at IS NOT NULL AND (parent_id IS NULL OR parent_id IN (SELECT id FROM live_items))
          UNION ALL
-         SELECT 'column', c.id, c.title, i.title, c.deleted_at
+         SELECT 'column', c.id, c.title, i.title, c.deleted_at, 0
          FROM columns c JOIN live_items i ON i.id = c.board_id
          WHERE c.deleted_at IS NOT NULL
          UNION ALL
-         SELECT 'task', t.id, t.title, i.title, t.deleted_at
+         SELECT 'task', t.id, t.title, i.title, t.deleted_at, 0
          FROM tasks t JOIN live_items i ON i.id = t.item_id LEFT JOIN columns c ON c.id = t.column_id
          WHERE t.deleted_at IS NOT NULL
            AND (t.column_id IS NULL OR c.deleted_at IS NULL)
@@ -551,7 +555,8 @@ export function createStore(db: DatabaseSync): Store {
           id: row.id as number,
           title: row.title as string,
           context: row.context as string,
-          deletedAt: row.deleted_at as string
+          deletedAt: row.deleted_at as string,
+          hasContent: row.has_content === 1
         })
       )
     },

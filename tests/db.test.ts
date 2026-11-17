@@ -102,6 +102,10 @@ describe('folders', () => {
     expect(() => store.setItemOrder(outer.id, [outer.id])).toThrow()
     expect(() => store.setItemOrder(inner.id, [outer.id])).toThrow()
     expect(() => store.setItemOrder(list.id, [inner.id])).toThrow()
+    // something in the trash cannot be moved
+    store.deleteItem(list.id, false)
+    expect(() => store.setItemOrder(outer.id, [list.id])).toThrow()
+    store.restore('item', list.id)
     expect(store.listItems().find((item) => item.id === outer.id)?.parentId).toBeNull()
   })
 
@@ -120,7 +124,7 @@ describe('folders', () => {
     expect(store.listItems()).toEqual([])
     expect(store.getStats()).toMatchObject({ lists: 0, tasks: 0 })
     expect(store.search('deep')).toEqual([])
-    expect(store.listTrash()).toMatchObject([{ kind: 'item', id: folder.id, context: 'folder' }])
+    expect(store.listTrash()).toMatchObject([{ kind: 'item', id: folder.id, context: 'folder', hasContent: true }])
     expect(() => store.createTask(list.id, null, 'X')).toThrow()
     store.restore('item', folder.id)
     expect(titles(store.listItems())).toEqual(['F', 'Inner', 'Deep list'])
