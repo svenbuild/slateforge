@@ -15,6 +15,7 @@ Arguments
   text                            as written, in quotes if it has spaces
   key=value key=value             become one object, e.g. done=true priority=high
   @path                           the text of that file, e.g. @C:\\tmp\\report.html
+                                  (also for text that looks like a number or like key=value)
 Output is JSON. An entry is a board, list, note or page. Ids come from "tree".
 
 Look around

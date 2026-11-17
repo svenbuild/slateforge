@@ -13,8 +13,10 @@ function frameDocument(html: string): string {
   const colors = Object.entries(THEME_COLORS)
     .map(([name, source]) => `--${name}: ${style.getPropertyValue(source).trim()};`)
     .join(' ')
+  // The rule in the first line lets the page use nothing but its own styles
+  // and embedded images: no scripts, no files, nothing from the internet.
   // Links ask for a new window, which the main process hands to the browser.
-  return `<!doctype html><meta charset="utf-8"><base target="_blank"><style>
+  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><base target="_blank"><style>
 :root { color-scheme: ${style.colorScheme || 'dark'}; ${colors} }
 body { margin: 0; padding: 20px 28px 40px; background: var(--bg); color: var(--text);
   font: 14px/1.55 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; }
@@ -39,13 +41,16 @@ export function PageView({ item, externalVersion, onUpdateItem }: ViewProps) {
   const [html, setHtml] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
 
+  // Loads the page, and again when another program changed the data. Not
+  // while the user edits the HTML, so typing is never replaced.
   useEffect(() => {
+    if (editing) return
     let stale = false
     api.getPage(item.id).then((loaded) => !stale && setHtml(loaded))
     return () => {
       stale = true
     }
-  }, [item.id, externalVersion])
+  }, [item.id, externalVersion, editing])
 
   const change = (value: string): void => {
     setHtml(value)

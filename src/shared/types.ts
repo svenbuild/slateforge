@@ -208,6 +208,7 @@ export type RendererApi = {
   [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<ReturnType<Api[K]>>
 } & {
   saveNoteSync(itemId: number, contentJson: string, contentText: string): void
-  // Calls back when another program (the command line tool) changed the data.
-  onExternalChange(callback: () => void): void
+  // Calls back when another program (the command line tool) changed the
+  // data. Returns a function that stops the calls again.
+  onExternalChange(callback: () => void): () => void
 }

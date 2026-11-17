@@ -92,7 +92,8 @@ function start(): void {
 
   // The command line tool writes to the same file. This number changes when
   // another program has saved something, and the window then loads again.
-  const dataVersion = (): unknown => db.prepare('PRAGMA data_version').get()?.data_version
+  const readVersion = db.prepare('PRAGMA data_version')
+  const dataVersion = (): unknown => readVersion.get()?.data_version
   let seenVersion = dataVersion()
   setInterval(() => {
     const version = dataVersion()

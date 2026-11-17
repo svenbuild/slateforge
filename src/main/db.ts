@@ -170,8 +170,10 @@ export function openDatabase(file: string): DatabaseSync {
   return db
 }
 
+// Takes the write lock at the start. The app and the command line tool can
+// then wait for each other instead of failing in the middle of a change.
 function transaction(db: DatabaseSync, work: () => void): void {
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     work()
     db.exec('COMMIT')
@@ -181,16 +183,20 @@ function transaction(db: DatabaseSync, work: () => void): void {
   }
 }
 
+// Runs the missing migrations one by one. The version is read inside the
+// transaction, so two programs that start together do not run one twice.
 function migrate(db: DatabaseSync): void {
-  const version = Number((db.prepare('PRAGMA user_version').get() as Row).user_version)
-  if (version > MIGRATIONS.length) {
-    throw new Error('This database was created by a newer version of Slateforge.')
-  }
-  for (let next = version; next < MIGRATIONS.length; next++) {
+  for (let upToDate = false; !upToDate; ) {
     transaction(db, () => {
-      db.exec(MIGRATIONS[next])
+      const version = Number((db.prepare('PRAGMA user_version').get() as Row).user_version)
+      if (version > MIGRATIONS.length) throw new Error('This database was created by a newer version of Slateforge.')
+      if (version === MIGRATIONS.length) {
+        upToDate = true
+        return
+      }
+      db.exec(MIGRATIONS[version])
       if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Migration broke a reference.')
-      db.exec(`PRAGMA user_version = ${next + 1}`)
+      db.exec(`PRAGMA user_version = ${version + 1}`)
     })
   }
 }

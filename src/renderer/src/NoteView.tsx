@@ -82,7 +82,11 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent | string | null }) {
+function NoteEditor(props: { itemId: number; json: string; externalVersion: number }) {
+  const { itemId } = props
+  const initial = parseNote(props.json)
+  // What the database holds, as far as this editor knows.
+  const stored = useRef(props.json)
   // True while the editor has changes that are not in the database yet.
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
@@ -97,6 +101,7 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
     dirty.current = false
     const json = JSON.stringify(current.getJSON())
     const text = current.getText({ blockSeparator: '\n' })
+    stored.current = json
     if (blocking) api.saveNoteSync(itemId, json, text)
     else
       api.saveNote(itemId, json, text).catch((error: unknown) => {
@@ -136,6 +141,24 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
   })
   editorRef.current = editor
 
+  // Another program changed something. Only when it was this note, and the
+  // user is not in the middle of typing, the new text replaces the old one.
+  useEffect(() => {
+    let stale = false
+    api.getNote(itemId).then((json) => {
+      if (stale || dirty.current || json === stored.current) return
+      stored.current = json
+      const content = parseNote(json)
+      editor.commands.setContent(content ?? '', {
+        emitUpdate: false,
+        ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+      })
+    })
+    return () => {
+      stale = true
+    }
+  }, [props.externalVersion])
+
   // Save what the timer did not save yet when the window closes or the note is left.
   useEffect(() => {
     const onUnload = (): void => save(true)
@@ -158,25 +181,20 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
 
 export function NoteView({ item, externalVersion, onUpdateItem }: ViewProps) {
   // Null while the note is loading. The editor only exists with loaded content.
-  const [content, setContent] = useState<{ initial: JSONContent | string | null } | null>(null)
-
-  // Another program changed the data: close the editor first, which saves
-  // unsaved typing, and only then read the note again.
-  useEffect(() => setContent(null), [externalVersion])
+  const [json, setJson] = useState<string | null>(null)
 
   useEffect(() => {
-    if (content !== null) return
     let stale = false
-    api.getNote(item.id).then((json) => !stale && setContent({ initial: parseNote(json) }))
+    api.getNote(item.id).then((loaded) => !stale && setJson(loaded))
     return () => {
       stale = true
     }
-  }, [content, item.id])
+  }, [item.id])
 
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {content && <NoteEditor itemId={item.id} initial={content.initial} />}
+      {json !== null && <NoteEditor itemId={item.id} json={json} externalVersion={externalVersion} />}
     </div>
   )
 }

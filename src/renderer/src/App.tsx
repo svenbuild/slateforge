@@ -87,13 +87,15 @@ export function App() {
   }, [toast])
 
   // An AI agent or script changed something: show it without a restart.
-  useEffect(() => {
-    api.onExternalChange(() => {
-      api.listItems().then(setItems)
-      setVersion((current) => current + 1)
-      setExternalVersion((current) => current + 1)
-    })
-  }, [])
+  useEffect(
+    () =>
+      api.onExternalChange(() => {
+        api.listItems().then(setItems)
+        setVersion((current) => current + 1)
+        setExternalVersion((current) => current + 1)
+      }),
+    []
+  )
 
   // A failed database call must not leave the screen out of sync with the data.
   useEffect(() => {
