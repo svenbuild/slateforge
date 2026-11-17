@@ -497,6 +497,10 @@ try {
   await web.locator('.sidebar-row', { hasText: 'Agent report' }).click()
   await web.frameLocator('.page-frame').locator('h1').waitFor()
   check(true, 'an HTML page is shown in the browser too')
+  // The lock of a page travels with the page itself, so it also holds in a window of its own.
+  const pageAddress = await web.locator('.page-frame').getAttribute('src')
+  const pagePolicy = await app.evaluate(async (_, url) => (await fetch(url)).headers.get('content-security-policy'), origin + pageAddress)
+  check(pagePolicy.includes('sandbox allow-scripts') && !pagePolicy.includes('allow-same-origin'), 'a page opened by its own address is still locked away from the app')
   await web.locator('.sidebar-row', { hasText: 'Garden ideas' }).click()
   await web.locator('.note-content').click()
   await web.keyboard.press('Control+End')

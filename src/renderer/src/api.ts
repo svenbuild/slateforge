@@ -62,6 +62,7 @@ function browserApi(): RendererApi {
     // sent at once. `keepalive` lets the browser finish the request (up to
     // about 64 KB, a longer note is saved by the normal timer instead).
     saveNoteSync: (...args: unknown[]) => void request('saveNote', args, true).catch(() => {}),
+    writeFileTextSync: (...args: unknown[]) => void request('writeFileText', args, true).catch(() => {}),
     onExternalChange: (callback: () => void) => {
       const timer = window.setInterval(async () => {
         try {

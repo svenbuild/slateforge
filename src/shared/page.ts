@@ -6,8 +6,11 @@ const PAGE_CSS = /<style>([\s\S]*?)<\/style>/.exec(template)?.[1] ?? ''
 
 // What a page may do: run its own scripts and styles and show embedded
 // images. It may not load anything from the internet or from disk and may not
-// send forms, so nothing written on a page can leave the computer.
-export const PAGE_POLICY = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'"
+// send forms, so nothing written on a page can leave the computer. The
+// "sandbox" part keeps it apart from the app. It is sent with the page, so it
+// also holds when a script opens the page in a window of its own.
+export const PAGE_POLICY =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox"
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char] as string)

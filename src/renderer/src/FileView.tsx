@@ -3,15 +3,17 @@ import { useEffect, useState } from 'react'
 import type { FileInfo } from '../../shared/types'
 import { api, getViewBase } from './api'
 import { TextEditor, type EditorSource } from './NoteView'
-import { ViewHeader, type ViewProps } from './ui'
+import { ViewHeader, cleanMessage, type ViewProps } from './ui'
 
 // A Markdown file is edited as text and written back as Markdown.
 const fileSource = (itemId: number): EditorSource => ({
   load: () => api.readFileText(itemId),
   parse: (text) => text,
-  save: (editor) => {
+  save: (editor, blocking, previous) => {
     const markdown = editor.getMarkdown()
-    return { stored: markdown, done: api.writeFileText(itemId, markdown) }
+    if (!blocking) return { stored: markdown, done: api.writeFileText(itemId, markdown, previous) }
+    api.writeFileTextSync(itemId, markdown, previous)
+    return { stored: markdown, done: null }
   }
 })
 
@@ -24,18 +26,20 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
   const [base, setBase] = useState('')
   // Counts up to load an HTML or PDF file again after it changed on disk.
   const [reloads, setReloads] = useState(0)
+  // Why the file cannot be shown, for example because it is too large.
+  const [problem, setProblem] = useState('')
 
   useEffect(() => {
     let stale = false
     const load = async (): Promise<void> => {
       const [loaded, viewBase] = await Promise.all([api.getFileInfo(item.id), getViewBase()])
-      const markdown = loaded.exists && loaded.kind === 'markdown' ? await api.readFileText(item.id) : null
-      if (stale) return
       setInfo(loaded)
       setBase(viewBase)
-      setText((current) => current ?? markdown)
+      if (!loaded.exists || loaded.kind !== 'markdown') return
+      const markdown = await api.readFileText(item.id)
+      if (!stale) setText((current) => current ?? markdown)
     }
-    load()
+    load().catch((error: unknown) => !stale && setProblem(error instanceof Error ? cleanMessage(error.message) : String(error)))
     return () => {
       stale = true
     }
@@ -64,6 +68,7 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
         </div>
       )}
 
+      {problem !== '' && <p className="empty-text page-empty">{problem}</p>}
       {info && !info.exists && <p className="empty-text page-empty">This file was not found. It may have been moved or deleted.</p>}
       {info?.exists && info.kind === 'other' && (
         <p className="empty-text page-empty">This kind of file cannot be shown here. Use "Open with Windows".</p>

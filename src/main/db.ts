@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { makeSnippet } from '../shared/logic'
 import {
@@ -610,8 +611,9 @@ export function createStore(db: DatabaseSync): Store {
     },
 
     createFile(path, parentId) {
-      const file = text(path, 1000).trim()
-      if (file === '') throw new Error('No file given')
+      if (text(path, 1000).trim() === '') throw new Error('No file given')
+      // A path like "notes\\plan.md" is completed from the folder of the caller.
+      const file = resolve(path.trim())
       // The title is the file name, the last part of the path.
       const item = store.createItem('file', file.split(/[\\/]/).pop() ?? file, parentId)
       run('UPDATE files SET path = ? WHERE item_id = ?', file, item.id)

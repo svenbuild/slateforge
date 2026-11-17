@@ -5,7 +5,7 @@ import iconPath from '../../build/icon.ico?asset'
 import { PAGE_POLICY, pageDocument } from '../shared/page'
 import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
-import { fileInfo, NOT_FOUND, readText, viewFile, writeText, type ViewResult } from './files'
+import { fileInfo, NOT_FOUND, readForEditor, viewFile, writeText, type ViewResult } from './files'
 import { startWebServer, type WebServer } from './web'
 
 // English texts with day-first dates in the built-in date picker.
@@ -142,8 +142,8 @@ function start(): void {
     getDataPath: () => dataFile,
     showDataFolder: () => shell.showItemInFolder(dataFile),
     getFileInfo: (itemId) => fileInfo(store.getFilePath(itemId)),
-    readFileText: (itemId) => readText(store.getFilePath(itemId)),
-    writeFileText: (itemId, text) => writeText(store.getFilePath(itemId), text),
+    readFileText: (itemId) => readForEditor(store.getFilePath(itemId)),
+    writeFileText: (itemId, text, expected) => writeText(store.getFilePath(itemId), text, expected),
     async pickFiles() {
       const options: Electron.OpenDialogOptions = {
         title: 'Link files',
@@ -156,8 +156,12 @@ function start(): void {
       const chosen = await (mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options))
       return chosen.filePaths
     },
+    // Documents open in their program. Anything else, which could be a
+    // program itself, is only shown in its folder.
     openFile(itemId) {
-      shell.openPath(store.getFilePath(itemId))
+      const info = fileInfo(store.getFilePath(itemId))
+      if (info.kind === 'other') shell.showItemInFolder(info.path)
+      else shell.openPath(info.path)
     },
     getViewBase: () => `${VIEW_SCHEME}://v/`,
     openInBrowser(itemId) {
@@ -226,11 +230,13 @@ function start(): void {
       return run(method, args)
     })
   }
-  // Used while the window closes, when an async call could get lost.
-  ipcMain.on('api:saveNoteSync', (event, itemId, contentJson, contentText) => {
+  // Used while the window closes, when an async call could get lost. Only
+  // for the two saves of the editors.
+  ipcMain.on('api:sync', (event, method, args) => {
     try {
       checkSender(event.sender)
-      run('saveNote', [itemId, contentJson, contentText])
+      if (method !== 'saveNote' && method !== 'writeFileText') throw new Error('Unknown method')
+      run(method, args)
     } catch (error) {
       console.error(error)
     }

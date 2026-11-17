@@ -14,7 +14,7 @@ import { SearchDialog } from './SearchDialog'
 import { SettingsView } from './SettingsView'
 import { Sidebar } from './Sidebar'
 import { TrashView } from './TrashView'
-import { ChoiceDialog, applyTheme, isEditable, type Deleted, type ViewProps } from './ui'
+import { ChoiceDialog, applyTheme, cleanMessage, isEditable, type Deleted, type ViewProps } from './ui'
 
 type View = { kind: 'item'; id: number } | { kind: 'overview' } | { kind: 'settings' } | { kind: 'trash' }
 
@@ -108,7 +108,8 @@ export function App() {
   useEffect(() => {
     const onFailure = (event: PromiseRejectionEvent): void => {
       console.error(event.reason)
-      setToast({ text: 'Something went wrong. The data was loaded again.', canUndo: false })
+      const reason = event.reason instanceof Error ? cleanMessage(event.reason.message) : 'Something went wrong.'
+      setToast({ text: `${reason} The data was loaded again.`, canUndo: false })
       api.listItems().then(setItems, () => {})
       setVersion((current) => current + 1)
     }

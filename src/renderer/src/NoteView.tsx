@@ -44,9 +44,10 @@ export interface EditorSource {
   load: () => Promise<string>
   // Turns the stored form into editor content. A string is taken as Markdown.
   parse: (stored: string) => JSONContent | string | null
-  // Saves the editor content. Returns the new stored form, and a promise that
-  // fails when the save failed (null when the save cannot be waited for).
-  save: (editor: Editor, blocking: boolean) => { stored: string; done: Promise<unknown> | null }
+  // Saves the editor content. `previous` is the stored form before this
+  // save. Returns the new stored form, and a promise that fails when the save
+  // failed (null when the save cannot be waited for).
+  save: (editor: Editor, blocking: boolean, previous: string) => { stored: string; done: Promise<unknown> | null }
 }
 
 // Notes are saved as the document of the editor plus plain text for the search.
@@ -125,11 +126,13 @@ export function TextEditor(props: { source: EditorSource; stored: string; versio
     const current = editorRef.current
     if (!dirty.current || !current) return
     dirty.current = false
-    const saved = source.save(current, blocking)
+    const previous = stored.current
+    const saved = source.save(current, blocking, previous)
     stored.current = saved.stored
     saved.done?.catch((error: unknown) => {
       // Still unsaved: the next change or closing the window tries again.
       dirty.current = true
+      stored.current = previous
       throw error
     })
   }

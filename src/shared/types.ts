@@ -169,8 +169,10 @@ export interface Api {
   getFilePath(itemId: number): string
   getFileInfo(itemId: number): FileInfo
   readFileText(itemId: number): string
-  // Only for Markdown files that are not on a network drive.
-  writeFileText(itemId: number, text: string): void
+  // Only for Markdown files that are not on a network drive. `expected` is
+  // the text last read or written: a file that another program changed in
+  // the meantime is not overwritten.
+  writeFileText(itemId: number, text: string, expected: string): void
   // Lets the user choose files in a dialog. Returns their paths.
   pickFiles(): Promise<string[]>
   // Opens the file in the program that Windows uses for it.
@@ -248,7 +250,9 @@ export const API_METHODS = [
 export type RendererApi = {
   [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<Awaited<ReturnType<Api[K]>>>
 } & {
+  // Saves that must not get lost while the window or tab is closing.
   saveNoteSync(itemId: number, contentJson: string, contentText: string): void
+  writeFileTextSync(itemId: number, text: string, expected: string): void
   // Calls back when another program (the command line tool) changed the
   // data. Returns a function that stops the calls again.
   onExternalChange(callback: () => void): () => void
