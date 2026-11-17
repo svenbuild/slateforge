@@ -96,7 +96,7 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
         <p className="empty-text page-empty">This kind of file cannot be shown here. Use "Open with Windows".</p>
       )}
       {info?.exists && info.kind === 'markdown' && text !== null && (
-        <TextEditor source={fileSource(item.id)} stored={text} version={version + fileVersion} readOnly={!info.writable} protect />
+        <TextEditor source={fileSource(item.id)} stored={text} version={version + fileVersion} readOnly={!info.writable} protect layoutKey={`table-columns-${item.id}`} />
       )}
       {/* An HTML file may run its scripts, but in a frame of its own that cannot reach the app. */}
       {info?.exists && info.kind === 'html' && address && (

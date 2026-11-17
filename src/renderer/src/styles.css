@@ -1102,13 +1102,25 @@ kbd {
   cursor: text;
 }
 
+/* The editor fills the view: toolbar on top, text below. */
+.editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .note-content {
-  max-width: 760px;
   min-height: 100%;
   outline: none;
   user-select: text;
   font-size: 15px;
   line-height: 1.65;
+}
+
+/* Text keeps a comfortable line length. Tables may be as wide as they need. */
+.note-content > :not(.tableWrapper) {
+  max-width: 760px;
 }
 
 .note-content > * {
@@ -1184,9 +1196,42 @@ kbd {
   text-decoration: line-through;
 }
 
+.note-content .tableWrapper {
+  margin: 0 0 0.8em;
+  padding: 0 6px 6px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .note-content table {
   border-collapse: collapse;
-  margin: 0 0 0.8em;
+  margin: 0;
+  table-layout: fixed;
+}
+
+.note-content th,
+.note-content td {
+  position: relative;
+}
+
+/* The edge of a column that can be dragged with the mouse. */
+.note-content .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.note-content.resize-cursor {
+  cursor: col-resize;
+}
+
+.note-content .selectedCell {
+  background: var(--selected);
 }
 
 .note-content th,

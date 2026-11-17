@@ -119,6 +119,66 @@ function losesText(editor: Editor, markdown: string): boolean {
   return lettersOf(editor.getMarkdown()) !== lettersOf(markdown)
 }
 
+// A column that would start very wide is cut to this, the rest wraps.
+const MAX_START_WIDTH = 420
+
+// The column widths of every table in the text, table by table.
+function columnWidths(editor: Editor): number[][] {
+  const tables: number[][] = []
+  editor.state.doc.descendants((node) => {
+    if (node.type.name !== 'table') return true
+    const widths: number[] = []
+    node.firstChild?.forEach((cell) => widths.push(...((cell.attrs.colwidth as number[] | null) ?? [])))
+    tables.push(widths)
+    return false
+  })
+  return tables
+}
+
+// Gives every table column a width of its own, so dragging one edge moves
+// only that edge and the other columns stay as they are. A column without a
+// width gets the remembered one, or else the width it has on screen now.
+function fixColumnWidths(editor: Editor, remembered: number[][]): void {
+  const { state, view } = editor
+  const change = state.tr
+  let tableIndex = 0
+  state.doc.descendants((table, tablePosition) => {
+    if (table.type.name !== 'table') return true
+    // Measured without line breaks, so a column starts as wide as its
+    // longest text needs (up to the limit), not squeezed by the window.
+    const element = (view.nodeDOM(tablePosition) as HTMLElement | null)?.querySelector('table')
+    if (element) element.style.whiteSpace = 'nowrap'
+    const onScreen = Array.from(element?.querySelector('tr')?.children ?? [], (cell) =>
+      Math.min(MAX_START_WIDTH, Math.ceil(cell.getBoundingClientRect().width) + 2)
+    )
+    if (element) element.style.whiteSpace = ''
+    const known = remembered[tableIndex] ?? []
+    const widths = known.length === onScreen.length ? known : onScreen
+    tableIndex += 1
+    table.forEach((row, rowOffset) => {
+      let column = 0
+      row.forEach((cell, cellOffset) => {
+        const span = (cell.attrs.colspan as number | undefined) ?? 1
+        const own = widths.slice(column, column + span)
+        if (!cell.attrs.colwidth && own.length === span && own.every((width) => width > 0)) {
+          change.setNodeMarkup(tablePosition + 1 + rowOffset + 1 + cellOffset, undefined, { ...cell.attrs, colwidth: own })
+        }
+        column += span
+      })
+    })
+    return false
+  })
+  if (change.docChanged) view.dispatch(change.setMeta('addToHistory', false))
+}
+
+function readRemembered(key: string | undefined): number[][] {
+  try {
+    return key ? JSON.parse(window.localStorage.getItem(key) ?? '[]') : []
+  } catch {
+    return []
+  }
+}
+
 // The editor with its toolbar. `stored` is the content as it was loaded.
 // With `protect`, a Markdown text that the editor cannot keep completely is
 // only shown, never written back.
@@ -128,6 +188,9 @@ export function TextEditor(props: {
   version: number
   readOnly?: boolean
   protect?: boolean
+  // Name under which the column widths of tables are remembered on this
+  // computer. For Markdown files, which cannot hold widths themselves.
+  layoutKey?: string
 }) {
   const { source } = props
   const initial = source.parse(props.stored)
@@ -139,6 +202,12 @@ export function TextEditor(props: {
   const editorRef = useRef<Editor | null>(null)
   // True while new text is put into the editor.
   const loading = useRef(false)
+  // The Markdown form of what the editor shows, to tell real changes of the
+  // text from changes of the layout only. Used for Markdown files.
+  const shown = useRef('')
+  // True once the user has clicked or typed in the editor since the last
+  // loading. Only then a change of the text is the user's and is saved.
+  const touched = useRef(false)
 
   // Writes unsaved changes. `blocking` is for a closing window, where an
   // async call could get lost.
@@ -163,7 +232,8 @@ export function TextEditor(props: {
       StarterKit.configure({ link: { openOnClick: false } }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      TableKit,
+      // Columns can be made wider or narrower by dragging their edge.
+      TableKit.configure({ table: { resizable: true, cellMinWidth: 60, handleWidth: 8 } }),
       Placeholder.configure({ placeholder: 'Write something… Try "# " for a heading, "- " for a list or "[ ] " for a checklist.' }),
       Markdown
     ],
@@ -183,11 +253,19 @@ export function TextEditor(props: {
       }
     },
     onUpdate: ({ editor: current }) => {
+      // Column widths of Markdown files are remembered here, not in the file.
+      if (props.layoutKey) window.localStorage.setItem(props.layoutKey, JSON.stringify(columnWidths(current)))
       // The editor may adjust the text by itself after loading, for example
-      // the layout of a table. Only what the user does, which always happens
-      // inside the focused editor and not while text is being loaded, is a
-      // change to save.
-      if (!current.isFocused || loading.current) return
+      // the layout of a table. Only what follows a click or a key press of
+      // the user, and not the loading itself, is a change to save.
+      if (!touched.current || loading.current) return
+      // In a Markdown file a new column width changes nothing in the text.
+      // Then there is nothing to write.
+      if (props.layoutKey) {
+        const markdown = current.getMarkdown()
+        if (markdown === shown.current) return
+        shown.current = markdown
+      }
       dirty.current = true
       window.clearTimeout(timer.current)
       timer.current = window.setTimeout(save, SAVE_DELAY_MS)
@@ -203,7 +281,18 @@ export function TextEditor(props: {
     setLossy(locked.current)
     editor.setEditable(!props.readOnly && !locked.current)
   }
-  useEffect(() => protectText(initial), [])
+  // Puts loaded text in order: fixed column widths, and the lock if needed.
+  const settle = (content: JSONContent | string | null): void => {
+    const remembered = readRemembered(props.layoutKey)
+    loading.current = true
+    touched.current = false
+    fixColumnWidths(editor, remembered)
+    if (props.layoutKey) shown.current = editor.getMarkdown()
+    // Adjustments that follow at once still belong to the loading.
+    window.setTimeout(() => (loading.current = false), 0)
+    protectText(content)
+  }
+  useEffect(() => settle(initial), [])
 
   // The data changed somewhere. Only when it was this text, and the
   // user is not in the middle of typing, the new text replaces the old one.
@@ -222,9 +311,7 @@ export function TextEditor(props: {
           emitUpdate: false,
           ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
         })
-        // Adjustments that follow at once still belong to the loading.
-        window.setTimeout(() => (loading.current = false), 0)
-        protectText(content)
+        settle(content)
       })
       // A text that cannot be read right now keeps what the editor shows. The
       // error must not count as a failed call, which would only load again.
@@ -245,7 +332,7 @@ export function TextEditor(props: {
   }, [])
 
   return (
-    <>
+    <div className="editor" onPointerDownCapture={() => (touched.current = true)} onKeyDownCapture={() => (touched.current = true)}>
       {!props.readOnly && !lossy && <Toolbar editor={editor} />}
       {lossy && (
         <p className="editor-notice">
@@ -256,7 +343,7 @@ export function TextEditor(props: {
       <div className="view-body note-body" onClick={(event) => event.target === event.currentTarget && editor.commands.focus('end')}>
         <EditorContent editor={editor} />
       </div>
-    </>
+    </div>
   )
 }
 

@@ -581,6 +581,26 @@ try {
   check(afterEdit.includes('# Changed outside!') && afterEdit.includes('0x0204') && afterEdit.includes('EOL adjust') && afterEdit.includes('Text after the table.'), 'editing keeps the table in the file')
   await shot('file-markdown')
 
+  // drag the right edge of the first column to make it wider
+  const columnWidths = () =>
+    page.locator('.note-content tr').first().locator('th, td').evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().width)))
+  const before = await columnWidths()
+  const firstCell = await page.locator('.note-content th').first().boundingBox()
+  await page.mouse.move(firstCell.x + firstCell.width - 1, firstCell.y + firstCell.height / 2)
+  await page.waitForTimeout(200)
+  await page.mouse.down()
+  await page.mouse.move(firstCell.x + firstCell.width + 119, firstCell.y + firstCell.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+  const after = await columnWidths()
+  check(Math.abs(after[0] - before[0] - 120) <= 4 && after[1] === before[1], `dragging a column edge changes only that column (${before} to ${after})`)
+  check(readFileSync(mdFile, 'utf8') === afterEdit, 'a new column width does not rewrite the Markdown file')
+  await row('index.html').click()
+  await row('meeting.md').click()
+  await page.locator('.note-content table').waitFor()
+  await page.waitForTimeout(300)
+  check((await columnWidths())[0] === after[0], 'the column width is remembered when the file is opened again')
+
   // a file with parts the editor cannot keep is shown, but never written
   const withHtml = '# Report\n\n<details><summary>More</summary>hidden words</details>\n\nPlain text.\n'
   writeFileSync(mdFile, withHtml)
