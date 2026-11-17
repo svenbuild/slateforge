@@ -54,6 +54,18 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  // A failed database call must not leave the screen out of sync with the data.
+  useEffect(() => {
+    const onFailure = (event: PromiseRejectionEvent): void => {
+      console.error(event.reason)
+      setToast({ text: 'Something went wrong. The data was loaded again.', canUndo: false })
+      api.listItems().then(setItems, () => {})
+      setVersion((current) => current + 1)
+    }
+    window.addEventListener('unhandledrejection', onFailure)
+    return () => window.removeEventListener('unhandledrejection', onFailure)
+  }, [])
+
   const onDeleted = useCallback((deleted: Deleted) => {
     undoStack.current.push(deleted)
     setToast({ text: `Deleted "${deleted.title}"`, canUndo: true })
