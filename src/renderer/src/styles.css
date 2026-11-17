@@ -678,6 +678,14 @@ kbd {
   white-space: pre;
 }
 
+.file-path {
+  padding: 0 28px 10px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .page-empty {
   padding: 4px 28px;
 }

@@ -402,7 +402,8 @@ try {
 <h3>Results</h3>
 <table><tr><th>Topic</th><th>State</th></tr><tr><td>Landing page</td><td>in progress</td></tr><tr><td>Zebra stripes</td><td>done</td></tr></table>
 <p><a href="https://example.com">A link that must not leave the app</a></p>
-<script>document.body.innerHTML = 'SCRIPT RAN'</script>`
+<p id="by-script"></p>
+<script>document.getElementById('by-script').textContent = 'filled in by a script'</script>`
   )
   const created = JSON.parse(cli('createPage', 'Agent report', 'null', `@${reportFile}`))
   await row('Agent report').waitFor()
@@ -411,7 +412,8 @@ try {
   const frame = page.frameLocator('.page-frame')
   await frame.locator('h1').waitFor()
   check((await frame.locator('h1').innerText()).startsWith('WEEKLY SUMMARY'), 'the page shows its HTML in the house style')
-  check(!(await frame.locator('body').innerText()).includes('SCRIPT RAN'), 'scripts inside a page do not run')
+  check((await frame.locator('#by-script').innerText()) === 'filled in by a script', 'scripts inside a page run')
+  check((await frame.locator('body').evaluate(() => Boolean(window.api) || window.parent === window)) === false, 'but a page script has no line to the app')
   // Catch the call that would open the real browser during this test.
   await app.evaluate(({ shell }) => {
     shell.openExternal = async (url) => {
@@ -495,6 +497,10 @@ try {
   await web.locator('.sidebar-row', { hasText: 'Agent report' }).click()
   await web.frameLocator('.page-frame').locator('h1').waitFor()
   check(true, 'an HTML page is shown in the browser too')
+  // The lock of a page travels with the page itself, so it also holds in a window of its own.
+  const pageAddress = await web.locator('.page-frame').getAttribute('src')
+  const pagePolicy = await app.evaluate(async (_, url) => (await fetch(url)).headers.get('content-security-policy'), origin + pageAddress)
+  check(pagePolicy.includes('sandbox allow-scripts') && !pagePolicy.includes('allow-same-origin'), 'a page opened by its own address is still locked away from the app')
   await web.locator('.sidebar-row', { hasText: 'Garden ideas' }).click()
   await web.locator('.note-content').click()
   await web.keyboard.press('Control+End')
@@ -507,6 +513,81 @@ try {
   await web.waitForTimeout(250)
   await web.screenshot({ path: join(outDir, 'browser-view.png') })
   await web.close()
+
+  // ---- linked local files ----
+  const linked = join(dataDir, 'linked')
+  mkdirSync(join(linked, 'site'), { recursive: true })
+  const mdFile = join(linked, 'meeting.md')
+  const htmlFile = join(linked, 'site', 'index.html')
+  const pdfFile = join(linked, 'paper.pdf')
+  writeFileSync(mdFile, '# Meeting notes\n\n- first point\n')
+  writeFileSync(htmlFile, '<link rel="stylesheet" href="style.css"><h1 id="title">plain</h1><script src="app.js"></script>')
+  writeFileSync(join(linked, 'site', 'style.css'), 'body { background: #102030; color: white; font-family: sans-serif } h1 { color: rgb(255, 0, 0) }')
+  writeFileSync(join(linked, 'site', 'app.js'), "document.getElementById('title').textContent = 'set by its own script'")
+  // A small but complete PDF, built here with correct positions for each part.
+  const pdfParts = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 400 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+    '<</Length 47>>\nstream\nBT /F1 28 Tf 40 100 Td (Hello from a PDF) Tj ET\nendstream',
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>'
+  ]
+  let pdf = '%PDF-1.4\n'
+  const offsets = pdfParts.map((part, index) => {
+    const offset = pdf.length
+    pdf += `${index + 1} 0 obj\n${part}\nendobj\n`
+    return offset
+  })
+  const xref = pdf.length
+  const table = offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
+  pdf += `xref\n0 ${pdfParts.length + 1}\n0000000000 65535 f \n${table}`
+  pdf += `trailer\n<</Size ${pdfParts.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF\n`
+  writeFileSync(pdfFile, pdf)
+  // The file dialog cannot be clicked from here, so it answers by itself.
+  await app.evaluate(({ dialog }, paths) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths })
+  }, [mdFile, htmlFile, pdfFile])
+  await page.locator('.sidebar-new > button').click()
+  await page.locator('.new-menu button', { hasText: 'File' }).click()
+  await row('paper.pdf').waitFor()
+  check((await row('meeting.md').count()) === 1 && (await row('index.html').count()) === 1, 'local files are linked into the sidebar under their names')
+
+  await row('meeting.md').click()
+  await page.locator('.note-content h1', { hasText: 'Meeting notes' }).waitFor()
+  check(readFileSync(mdFile, 'utf8') === '# Meeting notes\n\n- first point\n', 'opening a Markdown file does not change it')
+  await page.locator('.note-content li', { hasText: 'first point' }).click()
+  // The editor takes over the clicked position a moment after the click.
+  await page.waitForTimeout(300)
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('second point from Slateforge')
+  await page.waitForTimeout(900)
+  const written = readFileSync(mdFile, 'utf8')
+  check(written.includes('# Meeting notes') && written.includes('first point') && written.includes('- second point from Slateforge'), 'editing a Markdown file writes it back as Markdown')
+  writeFileSync(mdFile, '# Changed outside\n')
+  cli('listItems')
+  await row('index.html').click()
+  await row('meeting.md').click()
+  await page.locator('.note-content h1', { hasText: 'Changed outside' }).waitFor()
+  check(true, 'a Markdown file changed outside shows its new text')
+  await shot('file-markdown')
+
+  await row('index.html').click()
+  const fileFrame = page.frameLocator('.page-frame')
+  await fileFrame.locator('#title', { hasText: 'set by its own script' }).waitFor()
+  check((await fileFrame.locator('#title').evaluate((node) => getComputedStyle(node).color)) === 'rgb(255, 0, 0)', 'an HTML file runs its scripts and loads the styles next to it')
+  await shot('file-html')
+
+  await row('paper.pdf').click()
+  await page.locator('iframe.page-frame').waitFor()
+  await page.waitForTimeout(1500)
+  await shot('file-pdf')
+
+  const linkedItems = JSON.parse(cli('listItems')).filter((item) => item.type === 'file')
+  check(linkedItems.length === 3, 'the command line tool sees the linked files')
+  for (const item of linkedItems) cli('deleteItem', String(item.id), 'false')
+  await row('paper.pdf').waitFor({ state: 'detached' })
+  check(readFileSync(pdfFile).length > 0 && readFileSync(htmlFile).length > 0, 'deleting the entries leaves the files on disk')
 
   // ---- pinning ----
   await row('Shopping').click({ button: 'right' })

@@ -1,6 +1,7 @@
 // Entries hold content. Folders only group entries and other folders.
 // A page is free HTML, mostly written by AI agents for summaries and reports.
-export const ENTRY_TYPES = ['board', 'list', 'note', 'page'] as const
+// A file is a link to a local file (Markdown, HTML, PDF) that stays where it is.
+export const ENTRY_TYPES = ['board', 'list', 'note', 'page', 'file'] as const
 export const ITEM_TYPES = [...ENTRY_TYPES, 'folder'] as const
 export const PRIORITIES = ['low', 'medium', 'high'] as const
 export const SORT_MODES = ['manual', 'due', 'priority'] as const
@@ -102,6 +103,18 @@ export interface Progress {
   done: number
 }
 
+export type FileKind = 'markdown' | 'html' | 'pdf' | 'other'
+
+// What the app knows about a linked local file.
+export interface FileInfo {
+  path: string
+  name: string
+  kind: FileKind
+  exists: boolean
+  // True for Markdown files that are not on a network drive.
+  writable: boolean
+}
+
 export interface Settings {
   theme: Theme
   lastItemId: number | null
@@ -151,6 +164,22 @@ export interface Api {
   savePage(itemId: number, html: string): void
   createPage(title: string, parentId: number | null, html: string): Item
 
+  // Links a local file. Its title is the file name.
+  createFile(path: string, parentId: number | null): Item
+  getFilePath(itemId: number): string
+  getFileInfo(itemId: number): FileInfo
+  readFileText(itemId: number): string
+  // Only for Markdown files that are not on a network drive. `expected` is
+  // the text last read or written: a file that another program changed in
+  // the meantime is not overwritten.
+  writeFileText(itemId: number, text: string, expected: string): void
+  // Lets the user choose files in a dialog. Returns their paths.
+  pickFiles(): Promise<string[]>
+  // Opens the file in the program that Windows uses for it.
+  openFile(itemId: number): void
+  // Start of the addresses under which pages and files are shown in a frame.
+  getViewBase(): string
+
   search(query: string): SearchResult[]
 
   listTrash(): TrashEntry[]
@@ -195,6 +224,14 @@ export const API_METHODS = [
   'getPage',
   'savePage',
   'createPage',
+  'createFile',
+  'getFilePath',
+  'getFileInfo',
+  'readFileText',
+  'writeFileText',
+  'pickFiles',
+  'openFile',
+  'getViewBase',
   'search',
   'listTrash',
   'restore',
@@ -211,9 +248,11 @@ export const API_METHODS = [
 
 // The renderer sees every method as async, plus one sync call used while the window closes.
 export type RendererApi = {
-  [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<ReturnType<Api[K]>>
+  [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<Awaited<ReturnType<Api[K]>>>
 } & {
+  // Saves that must not get lost while the window or tab is closing.
   saveNoteSync(itemId: number, contentJson: string, contentText: string): void
+  writeFileTextSync(itemId: number, text: string, expected: string): void
   // Calls back when another program (the command line tool) changed the
   // data. Returns a function that stops the calls again.
   onExternalChange(callback: () => void): () => void

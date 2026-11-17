@@ -62,6 +62,7 @@ function browserApi(): RendererApi {
     // sent at once. `keepalive` lets the browser finish the request (up to
     // about 64 KB, a longer note is saved by the normal timer instead).
     saveNoteSync: (...args: unknown[]) => void request('saveNote', args, true).catch(() => {}),
+    writeFileTextSync: (...args: unknown[]) => void request('writeFileText', args, true).catch(() => {}),
     onExternalChange: (callback: () => void) => {
       const timer = window.setInterval(async () => {
         try {
@@ -81,6 +82,11 @@ function browserApi(): RendererApi {
   for (const method of API_METHODS) api[method] = (...args: unknown[]) => call(method, args)
   return api as unknown as RendererApi
 }
+
+// Start of the addresses that show pages and linked files in a frame. It
+// never changes while the app runs, so it is asked for only once.
+let viewBase: Promise<string> | undefined
+export const getViewBase = (): Promise<string> => (viewBase ??= api.getViewBase())
 
 // True when the app runs in a normal browser instead of its own window.
 export const inBrowser = window.api === undefined

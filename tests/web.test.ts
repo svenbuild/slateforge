@@ -42,7 +42,11 @@ beforeAll(async () => {
       changes += 1
       return { echoed: args }
     },
-    changes: () => changes
+    changes: () => changes,
+    view: (path) =>
+      path === 'page/7'
+        ? { status: 200, type: 'text/html; charset=utf-8', body: '<h1>page 7</h1>', policy: "default-src 'none'" }
+        : { status: 404, type: 'text/plain', body: 'Not found' }
   })
   const address = new URL(server.address(12))
   origin = address.origin
@@ -81,6 +85,23 @@ describe('web server', () => {
     expect((await send('/..%2Fsecret.html')).status).toBe(404)
     expect((await send('/%2e%2e/secret.html')).status).toBe(404)
     expect((await send('/missing.js')).status).toBe(404)
+  })
+
+  it('shows pages and files in frames under a second key that opens nothing else', async () => {
+    const answer = await send('/api/getViewBase', { method: 'POST', headers: { ...withKey(), Origin: origin }, body: '[]' })
+    const base = JSON.parse(answer.body).result as string
+    expect(base).toMatch(/^\/view\/[0-9a-f]{48}\/$/)
+    expect(base).not.toContain(key)
+    const page = await send(base + 'page/7')
+    expect(page.body).toBe('<h1>page 7</h1>')
+    expect(page.headers['content-security-policy']).toBe("default-src 'none'")
+    expect(page.headers['x-frame-options']).toBe('SAMEORIGIN')
+    expect((await send(base + 'page/8')).status).toBe(404)
+    expect((await send('/view/wrong/page/7')).status).toBe(404)
+    // the view key is no API key
+    const viewKey = base.split('/')[2]
+    expect((await send('/changes', { headers: { Authorization: `Bearer ${viewKey}` } })).status).toBe(403)
+    expect(calls).toEqual([])
   })
 
   it('runs API calls from its own pages and reports the change number', async () => {

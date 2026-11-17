@@ -5,6 +5,7 @@ import type { Item, ItemPatch, ItemType, Progress, SearchResult } from '../../sh
 import iconUrl from '../../../assets/icon.svg'
 import { api } from './api'
 import { BoardView } from './BoardView'
+import { FileView } from './FileView'
 import { ListView } from './ListView'
 import { NoteView } from './NoteView'
 import { OverviewView } from './OverviewView'
@@ -13,7 +14,7 @@ import { SearchDialog } from './SearchDialog'
 import { SettingsView } from './SettingsView'
 import { Sidebar } from './Sidebar'
 import { TrashView } from './TrashView'
-import { ChoiceDialog, applyTheme, isEditable, type Deleted, type ViewProps } from './ui'
+import { ChoiceDialog, applyTheme, cleanMessage, isEditable, type Deleted, type ViewProps } from './ui'
 
 type View = { kind: 'item'; id: number } | { kind: 'overview' } | { kind: 'settings' } | { kind: 'trash' }
 
@@ -23,7 +24,7 @@ interface Toast {
 }
 
 const TOAST_MS = 6000
-const ITEM_VIEWS = { board: BoardView, list: ListView, note: NoteView, page: PageView, folder: null }
+const ITEM_VIEWS = { board: BoardView, list: ListView, note: NoteView, page: PageView, file: FileView, folder: null }
 
 export function App() {
   const [items, setItems] = useState<Item[] | null>(null)
@@ -107,7 +108,8 @@ export function App() {
   useEffect(() => {
     const onFailure = (event: PromiseRejectionEvent): void => {
       console.error(event.reason)
-      setToast({ text: 'Something went wrong. The data was loaded again.', canUndo: false })
+      const reason = event.reason instanceof Error ? cleanMessage(event.reason.message) : 'Something went wrong.'
+      setToast({ text: `${reason} The data was loaded again.`, canUndo: false })
       api.listItems().then(setItems, () => {})
       setVersion((current) => current + 1)
     }
@@ -151,16 +153,24 @@ export function App() {
   if (items === null) return null
 
   const createItem = async (type: ItemType, parentId: number | null = null): Promise<void> => {
-    const item = await api.createItem(type, `New ${type}`, parentId)
-    setItems((current) => [...(current ?? []), item])
+    // A file entry is a link to files the user picks. Everything else starts
+    // empty and gets its name right away.
+    const created: Item[] = []
+    if (type === 'file') {
+      for (const path of await api.pickFiles()) created.push(await api.createFile(path, parentId))
+      if (created.length === 0) return
+    } else {
+      created.push(await api.createItem(type, `New ${type}`, parentId))
+      setRenamingId(created[0].id)
+    }
+    setItems((current) => [...(current ?? []), ...created])
     if (type === 'folder') {
       // A new folder inside a collapsed folder would be invisible.
       const parent = items.find((other) => other.id === parentId)
       if (parent?.collapsed) updateItem(parent.id, { collapsed: false })
     } else {
-      openItem(item.id, null, [...items, item])
+      openItem(created[created.length - 1].id, null, [...items, ...created])
     }
-    setRenamingId(item.id)
   }
 
   // Puts an item into a folder (or the top level) at a place among the items there.

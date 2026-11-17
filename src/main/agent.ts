@@ -37,7 +37,12 @@ Pages (HTML, for summaries, overviews, reports and results)
   Write only the body: Slateforge adds the house style by itself. Build the
   page from the parts shown in assets\\page-style.html of the Slateforge
   project (h1 with <em>, .chips, .stats, .bars, table, .cols, .note).
-  Scripts and files from the internet do not run.
+  Inline scripts run, for example for tabs or charts. Nothing is loaded
+  from the internet.
+
+Local files (Markdown, HTML, PDF)
+  createFile <path> <folderId|null>          link a file. It stays where it is and is shown in the app
+  getFilePath <fileId>
 
 Notes (Markdown)
   createNote <title> <folderId|null> <markdown>

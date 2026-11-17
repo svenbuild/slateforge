@@ -37,6 +37,32 @@ function parseNote(json: string): JSONContent | string | null {
   return typeof content.markdown === 'string' ? content.markdown : content
 }
 
+// Where the text of an editor comes from and where it is saved: a note in
+// the database or a Markdown file on disk.
+export interface EditorSource {
+  // Reads the stored form again, to notice changes made elsewhere.
+  load: () => Promise<string>
+  // Turns the stored form into editor content. A string is taken as Markdown.
+  parse: (stored: string) => JSONContent | string | null
+  // Saves the editor content. `previous` is the stored form before this
+  // save. Returns the new stored form, and a promise that fails when the save
+  // failed (null when the save cannot be waited for).
+  save: (editor: Editor, blocking: boolean, previous: string) => { stored: string; done: Promise<unknown> | null }
+}
+
+// Notes are saved as the document of the editor plus plain text for the search.
+const noteSource = (itemId: number): EditorSource => ({
+  load: () => api.getNote(itemId),
+  parse: parseNote,
+  save: (editor, blocking) => {
+    const json = JSON.stringify(editor.getJSON())
+    const text = editor.getText({ blockSeparator: '\n' })
+    if (!blocking) return { stored: json, done: api.saveNote(itemId, json, text) }
+    api.saveNoteSync(itemId, json, text)
+    return { stored: json, done: null }
+  }
+})
+
 interface Tool {
   name: string
   title: string
@@ -82,11 +108,12 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor(props: { itemId: number; json: string; version: number }) {
-  const { itemId } = props
-  const initial = parseNote(props.json)
-  // What the database holds, as far as this editor knows.
-  const stored = useRef(props.json)
+// The editor with its toolbar. `stored` is the content as it was loaded.
+export function TextEditor(props: { source: EditorSource; stored: string; version: number; readOnly?: boolean }) {
+  const { source } = props
+  const initial = source.parse(props.stored)
+  // What the note or file holds, as far as this editor knows.
+  const stored = useRef(props.stored)
   // True while the editor has changes that are not in the database yet.
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
@@ -99,16 +126,15 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
     const current = editorRef.current
     if (!dirty.current || !current) return
     dirty.current = false
-    const json = JSON.stringify(current.getJSON())
-    const text = current.getText({ blockSeparator: '\n' })
-    stored.current = json
-    if (blocking) api.saveNoteSync(itemId, json, text)
-    else
-      api.saveNote(itemId, json, text).catch((error: unknown) => {
-        // Still unsaved: the next change or closing the window tries again.
-        dirty.current = true
-        throw error
-      })
+    const previous = stored.current
+    const saved = source.save(current, blocking, previous)
+    stored.current = saved.stored
+    saved.done?.catch((error: unknown) => {
+      // Still unsaved: the next change or closing the window tries again.
+      dirty.current = true
+      stored.current = previous
+      throw error
+    })
   }
 
   const editor = useEditor({
@@ -121,6 +147,7 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
     ],
     content: initial ?? '',
     ...(typeof initial === 'string' ? { contentType: 'markdown' as const } : {}),
+    editable: !props.readOnly,
     editorProps: {
       attributes: { class: 'note-content', spellcheck: 'false' },
       // Plain Markdown text from the clipboard is turned into formatted content.
@@ -141,21 +168,26 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
   })
   editorRef.current = editor
 
-  // The data changed somewhere. Only when it was this note, and the
+  // The data changed somewhere. Only when it was this text, and the
   // user is not in the middle of typing, the new text replaces the old one.
   useEffect(() => {
     let stale = false
     const before = stored.current
-    api.getNote(itemId).then((json) => {
-      // A save that happened while waiting makes this answer outdated.
-      if (stale || dirty.current || stored.current !== before || json === before) return
-      stored.current = json
-      const content = parseNote(json)
-      editor.commands.setContent(content ?? '', {
-        emitUpdate: false,
-        ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+    source
+      .load()
+      .then((json) => {
+        // A save that happened while waiting makes this answer outdated.
+        if (stale || dirty.current || stored.current !== before || json === before) return
+        stored.current = json
+        const content = source.parse(json)
+        editor.commands.setContent(content ?? '', {
+          emitUpdate: false,
+          ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+        })
       })
-    })
+      // A text that cannot be read right now keeps what the editor shows. The
+      // error must not count as a failed call, which would only load again.
+      .catch(() => {})
     return () => {
       stale = true
     }
@@ -173,7 +205,7 @@ function NoteEditor(props: { itemId: number; json: string; version: number }) {
 
   return (
     <>
-      <Toolbar editor={editor} />
+      {!props.readOnly && <Toolbar editor={editor} />}
       <div className="view-body note-body" onClick={(event) => event.target === event.currentTarget && editor.commands.focus('end')}>
         <EditorContent editor={editor} />
       </div>
@@ -196,7 +228,7 @@ export function NoteView({ item, version, onUpdateItem }: ViewProps) {
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {json !== null && <NoteEditor itemId={item.id} json={json} version={version} />}
+      {json !== null && <TextEditor source={noteSource(item.id)} stored={json} version={version} />}
     </div>
   )
 }

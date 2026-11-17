@@ -31,6 +31,12 @@ export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme
 }
 
+// An error from the main process starts with technical words. This keeps
+// only the sentence that was written for the user.
+export function cleanMessage(message: string): string {
+  return message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+}
+
 export function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
