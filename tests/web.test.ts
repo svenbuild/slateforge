@@ -46,7 +46,7 @@ beforeAll(async () => {
   })
   const address = new URL(server.address(12))
   origin = address.origin
-  key = address.searchParams.get('key') as string
+  key = new URLSearchParams(address.hash.slice(1)).get('key') as string
 })
 
 afterAll(() => {
@@ -54,64 +54,62 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-const cookie = (): Record<string, string> => ({ Cookie: `slateforge_key=${key}` })
+const withKey = (): Record<string, string> => ({ Authorization: `Bearer ${key}` })
 
 describe('web server', () => {
-  it('listens on this computer only and puts the entry into the address', () => {
-    expect(server.address(12)).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?key=[0-9a-f]{48}#item=12$/)
+  it('listens on this computer only and keeps the key out of what is sent', () => {
+    // The part after "#" stays in the browser and is never sent to a server.
+    expect(server.address(12)).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#key=[0-9a-f]{48}&item=12$/)
   })
 
-  it('turns the key in the address into a cookie', async () => {
-    const response = await send(`/?key=${key}`)
-    expect(response.status).toBe(302)
-    expect(response.headers.location).toBe('/')
-    expect(String(response.headers['set-cookie'])).toContain(`slateforge_key=${key}; HttpOnly; SameSite=Strict`)
-  })
-
-  it('refuses everything without the key', async () => {
-    expect((await send('/')).status).toBe(403)
-    expect((await send('/?key=wrong')).status).toBe(403)
-    expect((await send('/assets/app.js')).status).toBe(403)
-    expect((await send('/changes', { headers: { Cookie: 'slateforge_key=wrong' } })).status).toBe(403)
+  it('refuses all data without the key and sets no cookie', async () => {
+    expect((await send('/changes')).status).toBe(403)
+    expect((await send('/changes', { headers: { Authorization: 'Bearer wrong' } })).status).toBe(403)
+    expect((await send('/changes', { headers: { Cookie: `slateforge_key=${key}` } })).status).toBe(403)
     expect((await send('/api/listItems', { method: 'POST', headers: { Origin: origin }, body: '[]' })).status).toBe(403)
+    expect((await send('/api/listItems', { headers: withKey() })).status).toBe(404)
+    expect((await send('/')).headers['set-cookie']).toBeUndefined()
     expect(calls).toEqual([])
   })
 
   it('serves the pages of the app, and nothing outside their folder', async () => {
-    expect((await send('/', { headers: cookie() })).body).toBe('<h1>app</h1>')
-    const script = await send('/assets/app.js', { headers: cookie() })
+    const page = await send('/')
+    expect(page.body).toBe('<h1>app</h1>')
+    expect(page.headers['x-frame-options']).toBe('DENY')
+    const script = await send('/assets/app.js')
     expect(script.headers['content-type']).toBe('text/javascript')
-    expect((await send('/..%2Fsecret.html', { headers: cookie() })).status).toBe(404)
-    expect((await send('/%2e%2e/secret.html', { headers: cookie() })).status).toBe(404)
-    expect((await send('/missing.js', { headers: cookie() })).status).toBe(404)
+    expect((await send('/..%2Fsecret.html')).status).toBe(404)
+    expect((await send('/%2e%2e/secret.html')).status).toBe(404)
+    expect((await send('/missing.js')).status).toBe(404)
   })
 
   it('runs API calls from its own pages and reports the change number', async () => {
     const response = await send('/api/updateTask', {
       method: 'POST',
-      headers: { ...cookie(), Origin: origin },
+      headers: { ...withKey(), Origin: origin },
       body: JSON.stringify([7, { done: true }])
     })
     expect(response.status).toBe(200)
     expect(JSON.parse(response.body)).toEqual({ result: { echoed: [7, { done: true }] } })
+    expect(response.headers['x-changes-before']).toBe('0')
     expect(response.headers['x-changes']).toBe('1')
     expect(calls).toEqual([['updateTask', [7, { done: true }]]])
-    expect((await send('/changes', { headers: cookie() })).body).toBe('1')
+    expect((await send('/changes', { headers: withKey() })).body).toBe('1')
   })
 
   it('refuses API calls from other websites and under another name', async () => {
     const body = '[]'
-    const other = await send('/api/emptyTrash', { method: 'POST', headers: { ...cookie(), Origin: 'https://evil.example' }, body })
+    const other = await send('/api/emptyTrash', { method: 'POST', headers: { ...withKey(), Origin: 'https://evil.example' }, body })
     expect(other.status).toBe(403)
-    const noOrigin = await send('/api/emptyTrash', { method: 'POST', headers: cookie(), body })
-    expect(noOrigin.status).toBe(403)
-    const otherName = await send('/', { headers: { ...cookie(), Host: 'evil.example' } })
+    const otherPort = await send('/api/emptyTrash', { method: 'POST', headers: { ...withKey(), Origin: 'http://127.0.0.1:1' }, body })
+    expect(otherPort.status).toBe(403)
+    const otherName = await send('/', { headers: { Host: 'evil.example' } })
     expect(otherName.status).toBe(403)
     expect(calls).toHaveLength(1)
   })
 
   it('reports failed calls and bad input as errors', async () => {
-    const headers = { ...cookie(), Origin: origin }
+    const headers = { ...withKey(), Origin: origin }
     const failed = await send('/api/explode', { method: 'POST', headers, body: '[]' })
     expect(failed.status).toBe(500)
     expect(JSON.parse(failed.body)).toEqual({ error: 'boom' })

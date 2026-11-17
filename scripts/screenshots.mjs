@@ -462,9 +462,9 @@ try {
   await page.locator('.view-header button[title="Open in browser"]').click()
   await page.waitForTimeout(700)
   const webUrl = await app.evaluate(() => globalThis.openedUrl)
-  check(/^http:\/\/127\.0\.0\.1:\d+\/\?key=[0-9a-f]+#item=\d+$/.test(webUrl), 'the browser button starts a server on this computer and opens an address with a key')
+  check(/^http:\/\/127\.0\.0\.1:\d+\/#key=[0-9a-f]+&item=\d+$/.test(webUrl), 'the browser button starts a server on this computer and opens an address with a key')
   const origin = new URL(webUrl).origin
-  check((await app.evaluate(async (_, url) => (await fetch(url)).status, origin + '/')) === 403, 'without the key the server refuses')
+  check((await app.evaluate(async (_, url) => (await fetch(url)).status, origin + '/changes')) === 403, 'without the key the server gives out no data')
 
   // A second plain window stands in for the browser: it has no direct line to the app.
   const [web] = await Promise.all([
@@ -477,6 +477,7 @@ try {
   await web.waitForSelector('.sidebar')
   await web.locator('.task-row').first().waitFor()
   check((await web.locator('.view-header h1').innerText()) === 'Shopping', 'the browser shows the app, opened on the same entry')
+  check(!web.url().includes('key='), 'the key is taken out of the address after loading')
   check((await web.locator('.view-header button[title="Open in browser"]').count()) === 0, 'inside the browser there is no browser button')
 
   await web.locator('.task-row', { hasText: 'Garden soil' }).locator('.check').click()

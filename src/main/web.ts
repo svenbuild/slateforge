@@ -7,10 +7,12 @@ import { extname, join, resolve, sep } from 'node:path'
 // same pages as the app window and calls the same API over HTTP.
 //
 // Who may use it: only programs on this computer (the server listens on
-// 127.0.0.1), and only a browser that was opened with the secret key in the
-// address. The key is then kept in a cookie.
+// 127.0.0.1). The pages themselves are no secret and need no key. The data
+// is: every API call must send the secret key in a header. The browser gets
+// the key in the part of the address after "#", which is never sent over the
+// network, and keeps it for that one tab. No cookie is used, because cookies
+// would also go to other web servers on this computer.
 
-const COOKIE = 'slateforge_key'
 const MAX_BODY_BYTES = 30_000_000
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -58,7 +60,13 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
   let origin = ''
 
   const send = (response: ServerResponse, status: number, body: string | Buffer, headers: Record<string, string> = {}): void => {
-    response.writeHead(status, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers })
+    response.writeHead(status, {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      // No other page may show the app inside a frame.
+      'X-Frame-Options': 'DENY',
+      ...headers
+    })
     response.end(body)
   }
 
@@ -66,27 +74,28 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
     // A website that points its own name at this computer is turned away here.
     if (`http://${request.headers.host}` !== origin) return send(response, 403, 'Forbidden')
     const url = new URL(request.url ?? '/', origin)
+    const isData = url.pathname === '/changes' || url.pathname.startsWith('/api/')
 
-    // First visit: the key in the address becomes a cookie.
-    if (request.method === 'GET' && url.pathname === '/' && url.searchParams.get('key') === key) {
-      return send(response, 302, '', { Location: '/', 'Set-Cookie': `${COOKIE}=${key}; HttpOnly; SameSite=Strict; Path=/` })
-    }
-    const cookies = (request.headers.cookie ?? '').split(';').map((part) => part.trim())
-    if (!cookies.includes(`${COOKIE}=${key}`)) {
-      return send(response, 403, 'Open this page with the browser button inside Slateforge.')
+    if (isData) {
+      if (request.headers.authorization !== `Bearer ${key}`) return send(response, 403, 'Forbidden')
+      // Only pages that came from this server may ask. (A page from elsewhere
+      // could not send the key header anyway.)
+      if (request.headers.origin !== undefined && request.headers.origin !== origin) return send(response, 403, 'Forbidden')
     }
 
     if (request.method === 'GET' && url.pathname === '/changes') return send(response, 200, String(options.changes()))
 
     if (request.method === 'POST' && url.pathname.startsWith('/api/')) {
-      // Only pages that came from this server may call the API.
-      if (request.headers.origin !== origin) return send(response, 403, 'Forbidden')
       try {
         const args: unknown = JSON.parse(await readBody(request))
         if (!Array.isArray(args)) throw new Error('Invalid arguments')
+        // The call runs in one go, so these two numbers tell exactly whether
+        // it changed the data itself.
+        const before = options.changes()
         const result = options.call(url.pathname.slice('/api/'.length), args)
         return send(response, 200, JSON.stringify({ result: result ?? null }), {
           'Content-Type': 'application/json',
+          'X-Changes-Before': String(before),
           'X-Changes': String(options.changes())
         })
       } catch (error) {
@@ -96,7 +105,7 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
       }
     }
 
-    if (request.method === 'GET') {
+    if (request.method === 'GET' && !isData) {
       // Only files inside the folder of the app pages.
       const file = resolve(join(root, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname)))
       const type = CONTENT_TYPES[extname(file)]
@@ -122,7 +131,7 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
       if (address === null || typeof address === 'string') return fail(new Error('No port'))
       origin = `http://127.0.0.1:${address.port}`
       ready({
-        address: (itemId) => `${origin}/?key=${key}#item=${itemId}`,
+        address: (itemId) => `${origin}/#key=${key}&item=${itemId}`,
         close: () => server.close()
       })
     })

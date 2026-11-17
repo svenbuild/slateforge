@@ -129,7 +129,11 @@ function start(): void {
       webServer ??= startWebServer({ root: join(__dirname, '../renderer'), call: callFromBrowser, changes: () => changes })
       webServer.then(
         (server) => shell.openExternal(server.address(itemId)),
-        (error) => dialog.showErrorBox('The browser view could not be started', String(error))
+        (error) => {
+          // The next click tries again.
+          webServer = undefined
+          dialog.showErrorBox('The browser view could not be started', String(error))
+        }
       )
     }
   }
