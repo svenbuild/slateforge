@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { placeRow } from '../../shared/logic'
 import type { Item, ItemPatch, ItemType, Progress, SearchResult } from '../../shared/types'
 import iconUrl from '../../../assets/icon.svg'
-import { api } from './api'
+import { api, inBrowser } from './api'
 import { BoardView } from './BoardView'
 import { FileView } from './FileView'
 import { ListView } from './ListView'
@@ -35,6 +35,9 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [folderToDelete, setFolderToDelete] = useState<Item | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+  // Shown while files from outside are dragged over the window.
+  const [dropHint, setDropHint] = useState<string | null>(null)
+  const linkFiles = useRef<(paths: string[], parentId: number | null) => void>(() => {})
   // Counts up when trashed data comes back or another program changed the
   // data, so the open view loads again.
   const [version, setVersion] = useState(0)
@@ -150,26 +153,74 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [undo])
 
+  // Files dragged in from outside (for example from the Explorer) are linked.
+  // Dropped on a folder they go into it, on an entry next to it, anywhere
+  // else to the top level.
+  useEffect(() => {
+    if (inBrowser) return
+    const hasFiles = (event: DragEvent): boolean => event.dataTransfer?.types.includes('Files') ?? false
+    const folderAt = (event: DragEvent): number | null => {
+      const row = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-drop-folder]') : null
+      return row?.dataset.dropFolder ? Number(row.dataset.dropFolder) : null
+    }
+    const onOver = (event: DragEvent): void => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.dataTransfer!.dropEffect = 'copy'
+      const folder = itemsRef.current.find((item) => item.id === folderAt(event))
+      setDropHint(folder ? `Drop to link into "${folder.title}"` : 'Drop to link the files')
+    }
+    const onLeave = (event: DragEvent): void => {
+      if (event.relatedTarget === null) setDropHint(null)
+    }
+    const onDrop = (event: DragEvent): void => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDropHint(null)
+      // Folders can not be linked, only files.
+      const paths = Array.from(event.dataTransfer!.items)
+        .filter((entry) => entry.webkitGetAsEntry()?.isFile)
+        .map((entry) => api.pathOfFile(entry.getAsFile()!))
+        .filter((path) => path !== '')
+      linkFiles.current(paths, folderAt(event))
+    }
+    window.addEventListener('dragover', onOver, true)
+    window.addEventListener('dragleave', onLeave, true)
+    window.addEventListener('drop', onDrop, true)
+    return () => {
+      window.removeEventListener('dragover', onOver, true)
+      window.removeEventListener('dragleave', onLeave, true)
+      window.removeEventListener('drop', onDrop, true)
+    }
+  }, [])
+
   if (items === null) return null
+
+  // Links files into a folder (or the top level) and opens the last one.
+  const addFiles = async (paths: string[], parentId: number | null): Promise<void> => {
+    const created: Item[] = []
+    for (const path of paths) created.push(await api.createFile(path, parentId))
+    if (created.length === 0) return
+    const loaded = [...itemsRef.current, ...created]
+    setItems(loaded)
+    openItem(created[created.length - 1].id, null, loaded)
+  }
+  linkFiles.current = addFiles
 
   const createItem = async (type: ItemType, parentId: number | null = null): Promise<void> => {
     // A file entry is a link to files the user picks. Everything else starts
     // empty and gets its name right away.
-    const created: Item[] = []
-    if (type === 'file') {
-      for (const path of await api.pickFiles()) created.push(await api.createFile(path, parentId))
-      if (created.length === 0) return
-    } else {
-      created.push(await api.createItem(type, `New ${type}`, parentId))
-      setRenamingId(created[0].id)
-    }
-    setItems((current) => [...(current ?? []), ...created])
+    if (type === 'file') return addFiles(await api.pickFiles(), parentId)
+    const created = await api.createItem(type, `New ${type}`, parentId)
+    setRenamingId(created.id)
+    setItems((current) => [...(current ?? []), created])
     if (type === 'folder') {
       // A new folder inside a collapsed folder would be invisible.
       const parent = items.find((other) => other.id === parentId)
       if (parent?.collapsed) updateItem(parent.id, { collapsed: false })
     } else {
-      openItem(created[created.length - 1].id, null, [...items, ...created])
+      openItem(created.id, null, [...items, created])
     }
   }
 
@@ -294,7 +345,9 @@ export function App() {
         />
       )}
 
-      {toast && (
+      {dropHint && <div className="toast drop-hint">{dropHint}</div>}
+
+      {toast && !dropHint && (
         <div className="toast" role="status">
           {toast.text}
           {toast.canUndo && (

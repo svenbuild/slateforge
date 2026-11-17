@@ -1,9 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { API_METHODS, type RendererApi } from '../shared/types'
 
 const api: Record<string, (...args: unknown[]) => unknown> = {
   saveNoteSync: (...args) => ipcRenderer.sendSync('api:sync', 'saveNote', args),
   writeFileTextSync: (...args) => ipcRenderer.sendSync('api:sync', 'writeFileText', args),
+  pathOfFile: (file) => webUtils.getPathForFile(file as File),
   // Returns a function that stops the calls again.
   onExternalChange: (callback) => {
     const listener = (): void => (callback as () => void)()

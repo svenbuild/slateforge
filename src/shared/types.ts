@@ -258,4 +258,7 @@ export type RendererApi = {
   // Calls back when another program (the command line tool) changed the
   // data. Returns a function that stops the calls again.
   onExternalChange(callback: () => void): () => void
+  // The place on disk of a file that was dragged into the window. Empty in a
+  // browser, which does not tell it.
+  pathOfFile(file: File): string
 }

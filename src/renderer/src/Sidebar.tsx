@@ -174,6 +174,8 @@ function SidebarRow(props: {
       }}
       style={{ paddingLeft: 8 + props.depth * INDENT_PX }}
       className={classes.join(' ')}
+      // Files dragged in from outside land in this folder.
+      data-drop-folder={item.type === 'folder' ? item.id : (item.parentId ?? '')}
       onClick={props.onOpen}
       onDoubleClick={() => props.onRenaming(true)}
       onContextMenu={(event) => {

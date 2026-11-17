@@ -31,7 +31,9 @@ computer: no cloud, no account.
   `assets/page-style.html`.
 - **Files** link local Markdown, HTML and PDF files into the sidebar. The
   file stays where it is. Markdown can be edited and is written back (never
-  on network drives), HTML runs with its scripts, PDFs open in a viewer.
+  on network drives), HTML runs with its scripts, PDFs open in a viewer. Files can also be
+  dragged from the Explorer into the window: dropped on a folder they are
+  linked inside it.
 - **Open in browser**: a small button in the header opens the whole app in
   your browser, on the current entry. Everything works there as in the app,
   and both sides show each other's changes within about a second. For this

@@ -552,6 +552,29 @@ try {
   await row('paper.pdf').waitFor()
   check((await row('meeting.md').count()) === 1 && (await row('index.html').count()) === 1, 'local files are linked into the sidebar under their names')
 
+  // ---- files dragged in from outside ----
+  const droppedFile = join(dataDir, 'dropped.md')
+  writeFileSync(droppedFile, '# Dropped\n')
+  const devtools = await page.context().newCDPSession(page)
+  const dropOn = async (locator, files) => {
+    const box = await locator.boundingBox()
+    const point = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) }
+    const data = { items: [], files, dragOperationsMask: 1 }
+    for (const type of ['dragEnter', 'dragOver']) await devtools.send('Input.dispatchDragEvent', { type, ...point, data })
+    return async () => {
+      await devtools.send('Input.dispatchDragEvent', { type: 'drop', ...point, data })
+    }
+  }
+  const drop = await dropOn(row('Home'), [droppedFile, dataDir])
+  await page.locator('.drop-hint', { hasText: 'Drop to link into "Home"' }).waitFor()
+  await shot('file-drop')
+  const rowsBefore = await page.locator('.sidebar-row').count()
+  await drop()
+  await row('dropped.md').waitFor()
+  await page.locator('.note-content h1', { hasText: 'Dropped' }).waitFor()
+  check((await row('dropped.md').evaluate((node) => node.style.paddingLeft)) === '24px', 'a file dropped on a folder is linked inside it and opened')
+  check((await page.locator('.sidebar-row').count()) === rowsBefore + 1 && (await page.locator('.drop-hint').count()) === 0, 'a dropped folder is not linked and the hint is gone')
+
   await row('meeting.md').click()
   await page.locator('.note-content h1', { hasText: 'Meeting notes' }).waitFor()
   check(readFileSync(mdFile, 'utf8') === '# Meeting notes\n\n- first point\n', 'opening a Markdown file does not change it')
@@ -625,7 +648,7 @@ try {
   await shot('file-pdf')
 
   const linkedItems = JSON.parse(cli('listItems')).filter((item) => item.type === 'file')
-  check(linkedItems.length === 3, 'the command line tool sees the linked files')
+  check(linkedItems.length === 4, 'the command line tool sees the linked files')
   for (const item of linkedItems) cli('deleteItem', String(item.id), 'false')
   await row('paper.pdf').waitFor({ state: 'detached' })
   check(readFileSync(pdfFile).length > 0 && readFileSync(htmlFile).length > 0, 'deleting the entries leaves the files on disk')

@@ -1692,3 +1692,9 @@ kbd {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+
+/* Shown while files from outside are dragged over the window. */
+.drop-hint {
+  pointer-events: none;
+  border-color: var(--accent);
+}

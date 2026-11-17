@@ -63,6 +63,7 @@ function browserApi(): RendererApi {
     // about 64 KB, a longer note is saved by the normal timer instead).
     saveNoteSync: (...args: unknown[]) => void request('saveNote', args, true).catch(() => {}),
     writeFileTextSync: (...args: unknown[]) => void request('writeFileText', args, true).catch(() => {}),
+    pathOfFile: () => '',
     onExternalChange: (callback: () => void) => {
       const timer = window.setInterval(async () => {
         try {
