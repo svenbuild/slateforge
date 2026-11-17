@@ -10,7 +10,7 @@ import { SearchDialog } from './SearchDialog'
 import { SettingsView } from './SettingsView'
 import { Sidebar } from './Sidebar'
 import { TrashView } from './TrashView'
-import { isEditable, type Deleted, type ViewProps } from './ui'
+import { applyTheme, isEditable, type Deleted, type ViewProps } from './ui'
 
 type View = { kind: 'item'; id: number } | { kind: 'settings' } | { kind: 'trash' } | { kind: 'empty' }
 
@@ -42,6 +42,7 @@ export function App() {
 
   useEffect(() => {
     Promise.all([api.listItems(), api.getSettings()]).then(([loaded, settings]) => {
+      applyTheme(settings.theme)
       setItems(loaded)
       const startId = settings.lastItemId ?? loaded[0]?.id
       if (startId !== undefined) setView({ kind: 'item', id: startId })
@@ -116,8 +117,9 @@ export function App() {
     api.setItemOrder(orderedIds)
   }
 
-  const deleteItem = async (item: Item): Promise<void> => {
-    await api.deleteItem(item.id)
+  // The screen is updated first and the database right after. If the database
+  // call fails, the failure handler above loads the real state again.
+  const deleteItem = (item: Item): void => {
     const remaining = items.filter((other) => other.id !== item.id)
     setItems(remaining)
     if (view.kind === 'item' && view.id === item.id) {
@@ -128,6 +130,7 @@ export function App() {
       }
     }
     onDeleted({ kind: 'item', id: item.id, title: item.title })
+    api.deleteItem(item.id)
   }
 
   // Restoring or deleting forever in the trash makes the undo list outdated.

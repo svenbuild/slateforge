@@ -1,7 +1,7 @@
 export const ITEM_TYPES = ['board', 'list', 'note'] as const
 export const PRIORITIES = ['low', 'medium', 'high'] as const
 export const SORT_MODES = ['manual', 'due', 'priority'] as const
-export const THEMES = ['system', 'light', 'dark'] as const
+export const THEMES = ['system', 'light', 'dark', 'black'] as const
 export const TRASH_KINDS = ['item', 'column', 'task'] as const
 
 export type ItemType = (typeof ITEM_TYPES)[number]

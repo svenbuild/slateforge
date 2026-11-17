@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { API_METHODS, type Api } from '../shared/types'
+import { API_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
 
 // English texts with day-first dates in the built-in date picker.
@@ -13,7 +13,16 @@ if (process.env.SLATEFORGE_DATA_DIR) app.setPath('userData', process.env.SLATEFO
 const dataFile = join(app.getPath('userData'), 'slateforge.db')
 let mainWindow: BrowserWindow | null = null
 
-function createWindow(): void {
+// Window color before the page has loaded, so there is no flash on start.
+const WINDOW_COLOR = { light: '#ffffff', dark: '#16171b', black: '#000000' }
+
+// The black theme is a variant of the dark one for the operating system.
+function applyTheme(theme: Theme): void {
+  nativeTheme.themeSource = theme === 'black' ? 'dark' : theme
+}
+
+function createWindow(theme: Theme): void {
+  const scheme = theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : theme
   mainWindow = new BrowserWindow({
     width: 1240,
     height: 800,
@@ -21,7 +30,7 @@ function createWindow(): void {
     minHeight: 520,
     show: false,
     title: 'Slateforge',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#16171b' : '#f6f6f8',
+    backgroundColor: WINDOW_COLOR[scheme],
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -43,13 +52,14 @@ function createWindow(): void {
 function start(): void {
   mkdirSync(app.getPath('userData'), { recursive: true })
   const store = createStore(openDatabase(dataFile))
-  nativeTheme.themeSource = store.getSettings().theme
+  const theme = store.getSettings().theme
+  applyTheme(theme)
 
   const api: Api = {
     ...store,
     setTheme(theme) {
       store.setTheme(theme)
-      nativeTheme.themeSource = theme
+      applyTheme(theme)
     },
     getDataPath: () => dataFile,
     showDataFolder: () => shell.showItemInFolder(dataFile)
@@ -78,7 +88,7 @@ function start(): void {
   })
 
   Menu.setApplicationMenu(null)
-  createWindow()
+  createWindow(theme)
 }
 
 if (!app.requestSingleInstanceLock()) {

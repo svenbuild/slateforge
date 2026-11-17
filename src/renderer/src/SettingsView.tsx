@@ -1,12 +1,14 @@
-import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react'
+import { FolderOpen, Monitor, Moon, MoonStar, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Stats, Theme } from '../../shared/types'
 import { api } from './api'
+import { applyTheme } from './ui'
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Monitor },
   { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon }
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'black', label: 'Black', icon: MoonStar }
 ] as const
 
 export function SettingsView({ version }: { version: number }) {
@@ -25,6 +27,7 @@ export function SettingsView({ version }: { version: number }) {
 
   const chooseTheme = (value: Theme): void => {
     setTheme(value)
+    applyTheme(value)
     api.setTheme(value)
   }
 

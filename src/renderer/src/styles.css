@@ -51,6 +51,23 @@
   }
 }
 
+/* Pure black variant of the dark theme with neutral grays. */
+:root[data-theme='black'] {
+  --bg: #000000;
+  --bg-sidebar: #000000;
+  --surface: #0d0d0d;
+  --surface-raised: #141414;
+  --column: #070707;
+  --border: #1e1e1e;
+  --border-strong: #353535;
+  --text: #ededed;
+  --text-muted: #8e8e8e;
+  --text-faint: #636363;
+  --hover: rgba(255, 255, 255, 0.07);
+  --selected: rgba(255, 255, 255, 0.11);
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.85);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -63,7 +80,6 @@ body,
 }
 
 body {
-  background: var(--bg);
   color: var(--text);
   font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 14px;
@@ -346,9 +362,12 @@ kbd {
 
 /* ---- layout ---- */
 
+/* The page itself has no background: until the app has loaded its theme, the
+   window color set by the main process shows through. */
 .app {
   display: flex;
   height: 100%;
+  background: var(--bg);
 }
 
 .main {

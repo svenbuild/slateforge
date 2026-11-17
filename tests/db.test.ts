@@ -266,6 +266,8 @@ describe('settings and statistics', () => {
     expect(store.getSettings()).toEqual({ theme: 'light', lastItemId: list.id })
     store.deleteItem(list.id)
     expect(store.getSettings().lastItemId).toBeNull()
+    store.setTheme('black')
+    expect(store.getSettings().theme).toBe('black')
     expect(() => store.setTheme('pink' as never)).toThrow()
   })
 

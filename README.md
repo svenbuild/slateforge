@@ -20,7 +20,7 @@ computer: no cloud, no account.
 - **Search** over everything with `Ctrl+K`, usable with the keyboard only.
 - **Trash and undo**: deleted things go to the trash. `Ctrl+Z` or the "Undo"
   button brings back the last deleted thing.
-- **Settings**: light, dark or system design, statistics and the location of
+- **Settings**: light, dark, black or system design, statistics and the location of
   the data file.
 
 ## Run from source

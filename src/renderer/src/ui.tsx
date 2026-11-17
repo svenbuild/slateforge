@@ -1,7 +1,7 @@
 import { Check, Flag } from 'lucide-react'
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { makeSnippet, todayIso } from '../../shared/logic'
-import type { Item, ItemPatch, Task, TaskPatch, TrashKind } from '../../shared/types'
+import type { Item, ItemPatch, Task, TaskPatch, Theme, TrashKind } from '../../shared/types'
 import { api } from './api'
 import { ItemIcon } from './icons'
 
@@ -20,6 +20,12 @@ export interface ViewProps {
   focusTask: { taskId: number } | null
   onUpdateItem: (patch: ItemPatch) => void
   onDeleted: (deleted: Deleted) => void
+}
+
+// Light and dark follow the color scheme that the main process sets. The
+// attribute lets the style sheet tell the black theme apart from the dark one.
+export function applyTheme(theme: Theme): void {
+  document.documentElement.dataset.theme = theme
 }
 
 export function isEditable(target: EventTarget | null): boolean {

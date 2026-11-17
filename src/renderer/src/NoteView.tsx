@@ -94,7 +94,12 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
     const json = JSON.stringify(current.getJSON())
     const text = current.getText({ blockSeparator: '\n' })
     if (blocking) api.saveNoteSync(itemId, json, text)
-    else api.saveNote(itemId, json, text)
+    else
+      api.saveNote(itemId, json, text).catch((error: unknown) => {
+        // Still unsaved: the next change or closing the window tries again.
+        dirty.current = true
+        throw error
+      })
   }
 
   const editor = useEditor({
