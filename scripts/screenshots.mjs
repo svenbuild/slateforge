@@ -2,7 +2,8 @@
 // and saves screenshots to ./screenshots. It also works as a smoke test: the
 // script stops with an error when something does not behave as expected.
 // Run `npm run build` first, then `npm run screenshots`.
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -47,6 +48,14 @@ function check(condition, message) {
 
 const texts = (selector) => page.locator(selector).allInnerTexts()
 
+// Runs the command line tool for AI agents on the data folder of this test.
+function cli(...words) {
+  return execFileSync(process.execPath, [join(import.meta.dirname, '..', 'out', 'main', 'cli.js'), ...words], {
+    env: { ...process.env, SLATEFORGE_DATA_DIR: dataDir },
+    encoding: 'utf8'
+  })
+}
+
 // A sidebar row by its exact title.
 const row = (title) => page.locator('.sidebar-row').filter({ has: page.getByText(title, { exact: true }) })
 
@@ -72,7 +81,8 @@ async function drag(from, to, offsetY = 0) {
 }
 
 async function createEntry(type, title) {
-  await page.locator('.sidebar-new button', { hasText: type }).click()
+  await page.locator('.sidebar-new > button').click()
+  await page.locator('.new-menu button', { hasText: type }).click()
   await page.locator('.sidebar-row input').fill(title)
   await page.keyboard.press('Enter')
 }
@@ -278,11 +288,12 @@ try {
   // ---- settings and light theme ----
   await page.locator('.sidebar-link', { hasText: 'Settings' }).click()
   await page.locator('.stat').first().waitFor()
-  check((await texts('.stat-value')).join() === '1,1,1,9,7', `statistics are correct (${(await texts('.stat-value')).join()})`)
+  check((await texts('.stat-value')).join() === '1,1,1,0,9,7', `statistics are correct (${(await texts('.stat-value')).join()})`)
   await shot('settings-dark')
 
   // ---- folders ----
-  await page.locator('.sidebar-new button[title="New folder"]').click()
+  await page.locator('.sidebar-new > button').click()
+  await page.locator('.new-menu button', { hasText: 'Folder' }).click()
   await page.locator('.sidebar-row input').fill('Home')
   await page.keyboard.press('Enter')
   await drag(row('Shopping'), row('Home'))
@@ -339,7 +350,8 @@ try {
   await row('Outdoor').waitFor({ state: 'detached' })
   check((await texts('.sidebar-row .sidebar-title')).join() === 'Home,Shopping,Garden ideas,Website relaunch', 'folder deleted, its content moved one level up')
 
-  await page.locator('.sidebar-new button[title="New folder"]').click()
+  await page.locator('.sidebar-new > button').click()
+  await page.locator('.new-menu button', { hasText: 'Folder' }).click()
   await page.locator('.sidebar-row input').fill('Temp')
   await page.keyboard.press('Enter')
   await row('Temp').click({ button: 'right' })
@@ -369,6 +381,77 @@ try {
   await page.locator('.menu-row.danger').click()
   await page.locator('.choice-dialog button', { hasText: 'Delete content too' }).click()
   await row('Temp').waitFor({ state: 'detached' })
+
+  // ---- command line tool for AI agents, and HTML pages ----
+  const reportFile = join(dataDir, 'report.html')
+  writeFileSync(
+    reportFile,
+    `<h1>Weekly summary</h1>
+<p style="color: var(--muted)">Written by an agent through the command line tool.</p>
+<div style="display: flex; gap: 12px">
+  <div style="flex: 1; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px">
+    <div style="font-size: 26px; font-weight: 600">7</div>open tasks</div>
+  <div style="flex: 1; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px">
+    <div style="font-size: 26px; font-weight: 600; color: var(--accent)">2</div>done this week</div>
+</div>
+<h2>Results</h2>
+<table><tr><th>Topic</th><th>State</th></tr><tr><td>Landing page</td><td>in progress</td></tr><tr><td>Zebra stripes</td><td>done</td></tr></table>
+<p><a href="https://example.com">A link that must not leave the app</a></p>
+<script>document.body.innerHTML = 'SCRIPT RAN'</script>`
+  )
+  const created = JSON.parse(cli('createPage', 'Agent report', 'null', `@${reportFile}`))
+  await row('Agent report').waitFor()
+  check(true, 'a page created by the command line tool shows up in the running app')
+  await row('Agent report').click()
+  const frame = page.frameLocator('.page-frame')
+  await frame.locator('h1').waitFor()
+  check((await frame.locator('h1').innerText()) === 'Weekly summary', 'the page shows its HTML')
+  check(!(await frame.locator('body').innerText()).includes('SCRIPT RAN'), 'scripts inside a page do not run')
+  // Catch the call that would open the real browser during this test.
+  await app.evaluate(({ shell }) => {
+    shell.openExternal = async (url) => {
+      globalThis.openedUrl = url
+    }
+  })
+  await frame.locator('a').click()
+  await page.waitForTimeout(500)
+  check((await app.evaluate(() => globalThis.openedUrl)) === 'https://example.com/', 'a link inside a page is handed to the browser')
+  check((await frame.locator('h1').count()) === 1, 'and the page itself stays as it is')
+  await shot('page-dark')
+
+  cli('savePage', String(created.id), '<h1>Changed by the agent</h1>')
+  await frame.locator('h1', { hasText: 'Changed by the agent' }).waitFor()
+  check(true, 'a change by the command line tool reaches the open page')
+  await page.locator('.view-header button', { hasText: 'Edit HTML' }).click()
+  await page.locator('.page-source').fill('<h1>Changed by hand</h1><p>zebra</p>')
+  await page.locator('.view-header button', { hasText: 'Show page' }).click()
+  await frame.locator('h1', { hasText: 'Changed by hand' }).waitFor()
+  check(cli('getPage', String(created.id)).includes('Changed by hand'), 'the user can edit the HTML and the tool reads it back')
+  check(JSON.parse(cli('search', 'zebra')).length === 1, 'the search finds text inside pages')
+
+  const board = JSON.parse(cli('listItems')).find((item) => item.title === 'Website relaunch')
+  const columns = JSON.parse(cli('getBoard', String(board.id))).columns
+  const cliTask = JSON.parse(cli('createTask', String(board.id), String(columns[0].id), 'Task from the agent'))
+  cli('updateTask', String(cliTask.id), 'priority=high', `dueDate=${day(2)}`)
+  await row('Website relaunch').click()
+  await page.locator('.card', { hasText: 'Task from the agent' }).locator('.pill.priority-high').waitFor()
+  check(true, 'a task created and changed by the tool shows up in the open board')
+  cli('deleteTask', String(cliTask.id))
+  await page.locator('.card', { hasText: 'Task from the agent' }).waitFor({ state: 'detached' })
+
+  const noteItem = JSON.parse(cli('createNote', 'Agent note', 'null', '# From Markdown\n\n- [x] first\n- [ ] second'))
+  await row('Agent note').click()
+  await page.locator('.note-content h1', { hasText: 'From Markdown' }).waitFor()
+  check((await page.locator('.note-content ul[data-type="taskList"] li').count()) === 2, 'a note written as Markdown is formatted in the editor')
+  cli('setNoteMarkdown', String(noteItem.id), '# Updated by the agent')
+  await page.locator('.note-content h1', { hasText: 'Updated by the agent' }).waitFor()
+  check(true, 'a change by the tool reaches the open note')
+  cli('deleteItem', String(noteItem.id), 'false')
+  await row('Agent note').waitFor({ state: 'detached' })
+  check(true, 'an entry deleted by the tool leaves the sidebar')
+  check(cli('tree').includes('page  Agent report'), 'the tool lists everything with ids')
+  cli('deleteItem', String(created.id), 'false')
+  await row('Agent report').waitFor({ state: 'detached' })
 
   // ---- black theme ----
   await setTheme('Black')

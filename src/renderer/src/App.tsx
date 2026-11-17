@@ -8,6 +8,7 @@ import { BoardView } from './BoardView'
 import { ListView } from './ListView'
 import { NoteView } from './NoteView'
 import { OverviewView } from './OverviewView'
+import { PageView } from './PageView'
 import { SearchDialog } from './SearchDialog'
 import { SettingsView } from './SettingsView'
 import { Sidebar } from './Sidebar'
@@ -22,7 +23,7 @@ interface Toast {
 }
 
 const TOAST_MS = 6000
-const ITEM_VIEWS = { board: BoardView, list: ListView, note: NoteView, folder: null }
+const ITEM_VIEWS = { board: BoardView, list: ListView, note: NoteView, page: PageView, folder: null }
 
 export function App() {
   const [items, setItems] = useState<Item[] | null>(null)
@@ -33,7 +34,8 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [folderToDelete, setFolderToDelete] = useState<Item | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
-  // Counts up when trashed data comes back, so the open view loads again.
+  // Counts up when trashed data comes back or another program changed the
+  // data, so the open view loads again.
   const [version, setVersion] = useState(0)
   // Deletes of this session, newest last. Undo restores the newest one.
   const undoStack = useRef<Deleted[]>([])
@@ -82,6 +84,17 @@ export function App() {
     const timer = window.setTimeout(() => setToast(null), TOAST_MS)
     return () => window.clearTimeout(timer)
   }, [toast])
+
+  // An AI agent or script changed something: show it without a restart.
+  useEffect(
+    () =>
+      api.onExternalChange(() => {
+        api.getSettings().then((settings) => applyTheme(settings.theme))
+        api.listItems().then(setItems)
+        setVersion((current) => current + 1)
+      }),
+    []
+  )
 
   // A failed database call must not leave the screen out of sync with the data.
   useEffect(() => {

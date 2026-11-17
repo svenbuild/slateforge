@@ -14,7 +14,8 @@ export interface Deleted {
 // Props shared by the board, list and note views.
 export interface ViewProps {
   item: Item
-  // Changes when data was restored from the trash, so views load again.
+  // Changes when data was restored from the trash or changed by another
+  // program (the command line tool), so views load again.
   version: number
   // Set when a search result asks to open a task.
   focusTask: { taskId: number } | null

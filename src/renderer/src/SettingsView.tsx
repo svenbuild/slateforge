@@ -36,6 +36,7 @@ export function SettingsView({ version }: { version: number }) {
         ['Boards', stats.boards],
         ['Lists', stats.lists],
         ['Notes', stats.notes],
+        ['Pages', stats.pages],
         ['Tasks', stats.tasks],
         ['Open tasks', stats.openTasks]
       ]

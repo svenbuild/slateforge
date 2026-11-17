@@ -29,8 +29,12 @@ const MARKDOWN_HINT = /^(#{1,6} |[-*+] |\d+\. |> |```)|\*\*[^*]+\*\*|\[[^\]]+\]\
 
 // A note that cannot be read must fail loudly. Opening it as an empty note
 // would overwrite the stored text with the first keystroke.
-function parseNote(json: string): JSONContent | null {
-  return json === '' ? null : JSON.parse(json)
+// Notes written by the command line tool are stored as { markdown: "..." }.
+// They come back as a string and the editor formats them.
+function parseNote(json: string): JSONContent | string | null {
+  if (json === '') return null
+  const content = JSON.parse(json)
+  return typeof content.markdown === 'string' ? content.markdown : content
 }
 
 interface Tool {
@@ -78,7 +82,11 @@ function Toolbar({ editor }: { editor: Editor }) {
   )
 }
 
-function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent | null }) {
+function NoteEditor(props: { itemId: number; json: string; version: number }) {
+  const { itemId } = props
+  const initial = parseNote(props.json)
+  // What the database holds, as far as this editor knows.
+  const stored = useRef(props.json)
   // True while the editor has changes that are not in the database yet.
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
@@ -93,6 +101,7 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
     dirty.current = false
     const json = JSON.stringify(current.getJSON())
     const text = current.getText({ blockSeparator: '\n' })
+    stored.current = json
     if (blocking) api.saveNoteSync(itemId, json, text)
     else
       api.saveNote(itemId, json, text).catch((error: unknown) => {
@@ -111,6 +120,7 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
       Markdown
     ],
     content: initial ?? '',
+    ...(typeof initial === 'string' ? { contentType: 'markdown' as const } : {}),
     editorProps: {
       attributes: { class: 'note-content', spellcheck: 'false' },
       // Plain Markdown text from the clipboard is turned into formatted content.
@@ -130,6 +140,26 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
     }
   })
   editorRef.current = editor
+
+  // The data changed somewhere. Only when it was this note, and the
+  // user is not in the middle of typing, the new text replaces the old one.
+  useEffect(() => {
+    let stale = false
+    const before = stored.current
+    api.getNote(itemId).then((json) => {
+      // A save that happened while waiting makes this answer outdated.
+      if (stale || dirty.current || stored.current !== before || json === before) return
+      stored.current = json
+      const content = parseNote(json)
+      editor.commands.setContent(content ?? '', {
+        emitUpdate: false,
+        ...(typeof content === 'string' ? { contentType: 'markdown' as const } : {})
+      })
+    })
+    return () => {
+      stale = true
+    }
+  }, [props.version])
 
   // Save what the timer did not save yet when the window closes or the note is left.
   useEffect(() => {
@@ -151,12 +181,13 @@ function NoteEditor({ itemId, initial }: { itemId: number; initial: JSONContent 
   )
 }
 
-export function NoteView({ item, onUpdateItem }: ViewProps) {
-  const [content, setContent] = useState<{ itemId: number; initial: JSONContent | null } | null>(null)
+export function NoteView({ item, version, onUpdateItem }: ViewProps) {
+  // Null while the note is loading. The editor only exists with loaded content.
+  const [json, setJson] = useState<string | null>(null)
 
   useEffect(() => {
     let stale = false
-    api.getNote(item.id).then((json) => !stale && setContent({ itemId: item.id, initial: parseNote(json) }))
+    api.getNote(item.id).then((loaded) => !stale && setJson(loaded))
     return () => {
       stale = true
     }
@@ -165,7 +196,7 @@ export function NoteView({ item, onUpdateItem }: ViewProps) {
   return (
     <div className="view">
       <ViewHeader item={item} onUpdateItem={onUpdateItem} />
-      {content?.itemId === item.id && <NoteEditor key={item.id} itemId={item.id} initial={content.initial} />}
+      {json !== null && <NoteEditor itemId={item.id} json={json} version={version} />}
     </div>
   )
 }

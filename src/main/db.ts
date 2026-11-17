@@ -106,6 +106,42 @@ export const MIGRATIONS = [
       SELECT i.id FROM items i JOIN live ON i.parent_id = live.id WHERE i.deleted_at IS NULL
     )
     SELECT items.* FROM items JOIN live ON live.id = items.id;
+  `,
+  // Version 3: HTML pages. The items table is built once more, this time
+  // without a list of allowed types, so new types need no rebuild again.
+  `
+  DROP VIEW live_items;
+  CREATE TABLE items_new (
+    id INTEGER PRIMARY KEY,
+    parent_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL,
+    sort_mode TEXT NOT NULL DEFAULT 'manual' CHECK (sort_mode IN ('manual', 'due', 'priority')),
+    collapsed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  INSERT INTO items_new (id, parent_id, type, title, icon, color, position, sort_mode, collapsed, created_at, updated_at, deleted_at)
+    SELECT id, parent_id, type, title, icon, color, position, sort_mode, collapsed, created_at, updated_at, deleted_at FROM items;
+  DROP TABLE items;
+  ALTER TABLE items_new RENAME TO items;
+  CREATE INDEX idx_items_parent ON items(parent_id);
+  CREATE VIEW live_items AS
+    WITH RECURSIVE live(id) AS (
+      SELECT id FROM items WHERE parent_id IS NULL AND deleted_at IS NULL
+      UNION ALL
+      SELECT i.id FROM items i JOIN live ON i.parent_id = live.id WHERE i.deleted_at IS NULL
+    )
+    SELECT items.* FROM items JOIN live ON live.id = items.id;
+  CREATE TABLE pages (
+    item_id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+    html TEXT NOT NULL DEFAULT '',
+    content_text TEXT NOT NULL DEFAULT ''
+  );
   `
 ]
 
@@ -117,12 +153,17 @@ const ACTIVE_TASKS = `
   WHERE t.deleted_at IS NULL
     AND (t.column_id IS NULL OR c.deleted_at IS NULL)`
 
+// The few HTML codes that matter for the search text of a page.
+const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", nbsp: ' ' }
+
 const TABLES: Record<TrashKind, string> = { item: 'items', column: 'columns', task: 'tasks' }
 
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file)
   // Foreign keys stay off while tables are rebuilt by a migration.
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = OFF;')
+  // The app and the command line tool may use the file at the same time, so
+  // a write waits a moment when the other one is writing.
+  db.exec('PRAGMA busy_timeout = 4000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = OFF;')
   // SQLite only lowercases ASCII, so search uses the JavaScript version.
   db.function('ulower', { deterministic: true }, (value) =>
     typeof value === 'string' ? value.toLowerCase() : value
@@ -132,27 +173,36 @@ export function openDatabase(file: string): DatabaseSync {
   return db
 }
 
+// Takes the write lock at the start. The app and the command line tool can
+// then wait for each other instead of failing in the middle of a change.
+// Inside a running transaction the work simply joins it.
 function transaction(db: DatabaseSync, work: () => void): void {
-  db.exec('BEGIN')
+  if (db.isTransaction) return work()
+  db.exec('BEGIN IMMEDIATE')
   try {
     work()
     db.exec('COMMIT')
   } catch (error) {
-    db.exec('ROLLBACK')
+    // After some errors SQLite has already ended the transaction by itself.
+    if (db.isTransaction) db.exec('ROLLBACK')
     throw error
   }
 }
 
+// Runs the missing migrations one by one. The version is read inside the
+// transaction, so two programs that start together do not run one twice.
 function migrate(db: DatabaseSync): void {
-  const version = Number((db.prepare('PRAGMA user_version').get() as Row).user_version)
-  if (version > MIGRATIONS.length) {
-    throw new Error('This database was created by a newer version of Slateforge.')
-  }
-  for (let next = version; next < MIGRATIONS.length; next++) {
+  for (let upToDate = false; !upToDate; ) {
     transaction(db, () => {
-      db.exec(MIGRATIONS[next])
+      const version = Number((db.prepare('PRAGMA user_version').get() as Row).user_version)
+      if (version > MIGRATIONS.length) throw new Error('This database was created by a newer version of Slateforge.')
+      if (version === MIGRATIONS.length) {
+        upToDate = true
+        return
+      }
+      db.exec(MIGRATIONS[version])
       if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Migration broke a reference.')
-      db.exec(`PRAGMA user_version = ${next + 1}`)
+      db.exec(`PRAGMA user_version = ${version + 1}`)
     })
   }
 }
@@ -283,7 +333,7 @@ export function createStore(db: DatabaseSync): Store {
     return all(`SELECT t.* ${ACTIVE_TASKS} AND t.item_id = ? ORDER BY t.position, t.id`, id(itemId)).map(toTask)
   }
 
-  return {
+  const store: Store = {
     listItems() {
       return all('SELECT * FROM live_items ORDER BY position, id').map(toItem)
     },
@@ -304,6 +354,7 @@ export function createStore(db: DatabaseSync): Store {
           now()
         )
         if (type === 'note') run('INSERT INTO notes (item_id) VALUES (?)', itemId)
+        if (type === 'page') run('INSERT INTO pages (item_id) VALUES (?)', itemId)
         if (type === 'board') {
           ;['To do', 'In progress', 'Done'].forEach((columnTitle, position) =>
             run('INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)', itemId, columnTitle, position)
@@ -328,15 +379,18 @@ export function createStore(db: DatabaseSync): Store {
     // Writes the complete order of one folder (or of the top level). Items
     // dragged in from somewhere else are moved by this as well.
     setItemOrder(parentId, orderedIds) {
-      checkParent(idOrNull(parentId))
+      idOrNull(parentId)
       const ids = idList(orderedIds)
-      // Trashed items stay where they are.
-      ids.forEach(activeItem)
-      // A folder must not end up inside itself.
-      for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
-        if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
-      }
+      // The checks run inside the transaction, so another program cannot
+      // change the folders between the checks and the move.
       transaction(db, () => {
+        checkParent(parentId)
+        // Trashed items stay where they are.
+        ids.forEach(activeItem)
+        // A folder must not end up inside itself.
+        for (let up = parentId; up !== null; up = get('SELECT parent_id FROM items WHERE id = ?', up)?.parent_id as number | null) {
+          if (ids.includes(up)) throw new Error('A folder cannot be moved into itself')
+        }
         ids.forEach((itemId, position) =>
           run('UPDATE items SET position = ?, parent_id = ? WHERE id = ?', position, parentId, itemId)
         )
@@ -344,10 +398,12 @@ export function createStore(db: DatabaseSync): Store {
     },
 
     deleteItem(itemId, keepContent) {
-      const row = get('SELECT parent_id FROM items WHERE id = ? AND deleted_at IS NULL', id(itemId))
-      if (!row) return
-      const parentId = row.parent_id as number | null
+      id(itemId)
       transaction(db, () => {
+        // Read inside the transaction: another program may just have moved it.
+        const row = get('SELECT parent_id FROM items WHERE id = ? AND deleted_at IS NULL', itemId)
+        if (!row) return
+        const parentId = row.parent_id as number | null
         if (keepContent === true) {
           // The content goes to the end of the level above, in its old order.
           const offset = nextPosition('items', 'parent_id IS ?', parentId)
@@ -473,6 +529,53 @@ export function createStore(db: DatabaseSync): Store {
       })
     },
 
+    getNoteText(itemId) {
+      if (activeItem(id(itemId)).type !== 'note') throw new Error('Not a note')
+      const row = get('SELECT content_text FROM notes WHERE item_id = ?', itemId)
+      return (row?.content_text as string | undefined) ?? ''
+    },
+
+    // The editor turns the Markdown into formatted text when the note is opened.
+    setNoteMarkdown(itemId, markdown) {
+      if (activeItem(id(itemId)).type !== 'note') throw new Error('Not a note')
+      store.saveNote(itemId, JSON.stringify({ markdown: text(markdown, MAX_NOTE) }), markdown)
+    },
+
+    createNote(rawTitle, parentId, markdown) {
+      text(markdown, MAX_NOTE)
+      const item = store.createItem('note', rawTitle, parentId)
+      store.setNoteMarkdown(item.id, markdown)
+      return item
+    },
+
+    getPage(itemId) {
+      if (activeItem(id(itemId)).type !== 'page') throw new Error('Not a page')
+      const row = get('SELECT html FROM pages WHERE item_id = ?', itemId)
+      return (row?.html as string | undefined) ?? ''
+    },
+
+    savePage(itemId, html) {
+      if (activeItem(id(itemId)).type !== 'page') throw new Error('Not a page')
+      // The text without tags is what the search looks through.
+      const plain = text(html, MAX_NOTE)
+        .replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, name: string) => HTML_ENTITIES[name])
+        .replace(/\s+/g, ' ')
+        .trim()
+      transaction(db, () => {
+        run('UPDATE pages SET html = ?, content_text = ? WHERE item_id = ?', html, plain, itemId)
+        run('UPDATE items SET updated_at = ? WHERE id = ?', now(), itemId)
+      })
+    },
+
+    createPage(rawTitle, parentId, html) {
+      text(html, MAX_NOTE)
+      const item = store.createItem('page', rawTitle, parentId)
+      store.savePage(item.id, html)
+      return item
+    },
+
     search(rawQuery) {
       const query = text(rawQuery, MAX_TITLE).trim()
       if (query === '') return []
@@ -480,10 +583,10 @@ export function createStore(db: DatabaseSync): Store {
       const results: SearchResult[] = []
 
       const items = all(
-        `SELECT i.id, i.type, i.title, COALESCE(n.content_text, '') AS body
-         FROM live_items i LEFT JOIN notes n ON n.item_id = i.id
+        `SELECT i.id, i.type, i.title, COALESCE(n.content_text, p.content_text, '') AS body
+         FROM live_items i LEFT JOIN notes n ON n.item_id = i.id LEFT JOIN pages p ON p.item_id = i.id
          WHERE i.type <> 'folder'
-           AND (instr(ulower(i.title), ?) > 0 OR instr(ulower(COALESCE(n.content_text, '')), ?) > 0)
+           AND (instr(ulower(i.title), ?) > 0 OR instr(ulower(COALESCE(n.content_text, p.content_text, '')), ?) > 0)
          ORDER BY instr(ulower(i.title), ?) = 0, i.position, i.id
          LIMIT ?`,
         needle,
@@ -602,9 +705,24 @@ export function createStore(db: DatabaseSync): Store {
         boards: byType('board'),
         lists: byType('list'),
         notes: byType('note'),
+        pages: byType('page'),
         tasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS}`),
         openTasks: count(`SELECT COUNT(*) AS n ${ACTIVE_TASKS} AND t.done = 0`)
       }
     }
   }
+
+  // Every command runs as one transaction. Its checks and its writes then see
+  // the same data, also while another program writes to the file.
+  for (const name of Object.keys(store) as (keyof Store)[]) {
+    const command = store[name] as (...args: unknown[]) => unknown
+    ;(store as Record<string, unknown>)[name] = (...args: unknown[]): unknown => {
+      let result: unknown
+      transaction(db, () => {
+        result = command(...args)
+      })
+      return result
+    }
+  }
+  return store
 }
