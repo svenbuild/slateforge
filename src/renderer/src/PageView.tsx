@@ -28,7 +28,7 @@ export function PageView({ item, version, onUpdateItem }: ViewProps) {
 
   return (
     <div className="view">
-      <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={html === null ? null : () => html}>
+      <ViewHeader item={item} onUpdateItem={onUpdateItem}>
         <button type="button" className="ghost-button" disabled={html === null} onClick={() => setEditing(!editing)}>
           {editing ? <Eye size={15} /> : <Code size={15} />}
           {editing ? 'Show page' : 'Edit HTML'}
@@ -49,7 +49,7 @@ export function PageView({ item, version, onUpdateItem }: ViewProps) {
       {html !== null && !editing && html.trim() !== '' && (
         // The sandbox locks the frame: no scripts, no forms, no access to the app.
         // Links may only ask for a new window, which opens the normal browser.
-        <iframe className="page-frame" title={item.title} sandbox="allow-popups" srcDoc={pageDocument(item.title, html)} />
+        <iframe className="page-frame" title={item.title} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={pageDocument(item.title, html)} />
       )}
     </div>
   )

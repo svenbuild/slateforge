@@ -18,7 +18,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { moveId, placeRow } from '../../shared/logic'
 import type { Column, Task } from '../../shared/types'
 import { api } from './api'
-import { boardBody } from './export'
 import { TaskPanel } from './TaskPanel'
 import { Checkbox, InlineEdit, TaskMeta, ViewHeader, useScrollToSelected, useTaskActions, type ViewProps } from './ui'
 
@@ -156,7 +155,6 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted, o
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [newColumnId, setNewColumnId] = useState<number | null>(null)
-  const [loaded, setLoaded] = useState(false)
   const { update, remove } = useTaskActions(setTasks, onDeleted, onTasksChanged)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -164,7 +162,6 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted, o
     const data = await api.getBoard(item.id)
     setColumns(data.columns)
     setTasks(data.tasks)
-    setLoaded(true)
   }, [item.id])
 
   useEffect(() => {
@@ -258,7 +255,7 @@ export function BoardView({ item, version, focusTask, onUpdateItem, onDeleted, o
   return (
     <div className="view-with-panel">
       <div className="view">
-        <ViewHeader item={item} onUpdateItem={onUpdateItem} exportBody={loaded ? () => boardBody(item.title, columns, tasks) : null} />
+        <ViewHeader item={item} onUpdateItem={onUpdateItem} />
         <div className="view-body board-body">
           <DndContext
             sensors={sensors}
