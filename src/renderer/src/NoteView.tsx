@@ -120,6 +120,24 @@ function losesText(editor: Editor, markdown: string): boolean {
   return lettersOf(editor.getMarkdown()) !== lettersOf(markdown)
 }
 
+// The Markdown writer turns every "&", "<" and ">" of the text into a code
+// like "&gt;", so "a -> b" would come back as "a -&gt; b". Where the plain
+// sign cannot be mistaken for HTML or a quote, it is written as it is.
+function keepPlainSigns(editor: Editor): void {
+  // The library keeps this function to itself, so its type is given here.
+  const writer = editor.markdown as unknown as { encodeTextForMarkdown: (...args: unknown[]) => string } | undefined
+  if (!writer) return
+  const encode = writer.encodeTextForMarkdown.bind(writer)
+  writer.encodeTextForMarkdown = (...args) =>
+    encode(...args)
+      // Not at the start, where ">" would begin a quote.
+      .replace(/(?<=[^\n])&gt;/g, '>')
+      // Not before a letter, "/", "!" or "?", where "<" would begin a tag.
+      .replace(/&lt;(?![a-zA-Z/!?])/g, '<')
+      // Not before something that reads as a code itself, like "&copy;".
+      .replace(/&amp;(?!#?\w+;)/g, '&')
+}
+
 // A column that would start very wide is cut to this, the rest wraps.
 const MAX_START_WIDTH = 420
 
@@ -268,6 +286,7 @@ export function TextEditor(props: {
     content: initial ?? '',
     ...(typeof initial === 'string' ? { contentType: 'markdown' as const } : {}),
     editable: !props.readOnly,
+    onBeforeCreate: ({ editor: created }) => keepPlainSigns(created),
     editorProps: {
       attributes: { class: 'note-content', spellcheck: 'false' },
       // Plain Markdown text from the clipboard is turned into formatted content.

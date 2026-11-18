@@ -520,7 +520,7 @@ try {
   const mdFile = join(linked, 'meeting.md')
   const htmlFile = join(linked, 'site', 'index.html')
   const pdfFile = join(linked, 'paper.pdf')
-  writeFileSync(mdFile, '# Meeting notes\n\n- first point\n')
+  writeFileSync(mdFile, '# Meeting notes\n\n- first point: A -> B, R&D, 3 < 5\n')
   writeFileSync(htmlFile, '<link rel="stylesheet" href="style.css"><h1 id="title">plain</h1><script src="app.js"></script>')
   writeFileSync(join(linked, 'site', 'style.css'), 'body { background: #102030; color: white; font-family: sans-serif } h1 { color: rgb(255, 0, 0) }')
   writeFileSync(join(linked, 'site', 'app.js'), "document.getElementById('title').textContent = 'set by its own script'")
@@ -577,7 +577,7 @@ try {
 
   await row('meeting.md').click()
   await page.locator('.note-content h1', { hasText: 'Meeting notes' }).waitFor()
-  check(readFileSync(mdFile, 'utf8') === '# Meeting notes\n\n- first point\n', 'opening a Markdown file does not change it')
+  check(readFileSync(mdFile, 'utf8') === '# Meeting notes\n\n- first point: A -> B, R&D, 3 < 5\n', 'opening a Markdown file does not change it')
   await page.locator('.note-content li', { hasText: 'first point' }).click()
   // The editor takes over the clicked position a moment after the click.
   await page.waitForTimeout(300)
@@ -587,6 +587,7 @@ try {
   await page.waitForTimeout(900)
   const written = readFileSync(mdFile, 'utf8')
   check(written.includes('# Meeting notes') && written.includes('first point') && written.includes('- second point from Slateforge'), 'editing a Markdown file writes it back as Markdown')
+  check(written.includes('- first point: A -> B, R&D, 3 < 5') && (await page.locator('.editor-notice').count()) === 0, 'plain signs like -> and & stay as they are and do not lock the file')
   // another program changes the file while it is open
   const withTable = '# Changed outside\n\n| DID | Problem |\n| --- | --- |\n| 0x0204 | LCD status |\n| 0xFEB0 | EOL adjust |\n\nText after the table.\n'
   writeFileSync(mdFile, withTable)
