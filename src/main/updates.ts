@@ -42,7 +42,15 @@ export function createUpdates(
       if (!result?.isUpdateAvailable) return setStatus({ kind: 'current' })
       failure = 'Could not download the update.'
       setStatus({ kind: 'downloading' })
-      await updater.downloadUpdate()
+      // The updater only prepares installing on quit when this is on at the
+      // end of the download. The quit itself checks it again, so it is set
+      // back to the setting right after.
+      updater.autoInstallOnAppQuit = true
+      try {
+        await updater.downloadUpdate()
+      } finally {
+        updater.autoInstallOnAppQuit = automatic
+      }
       setStatus({ kind: 'ready', version: result.updateInfo.version })
     } catch {
       setStatus({ kind: 'error', message: failure })

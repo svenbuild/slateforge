@@ -52,6 +52,9 @@ function browserApi(): RendererApi {
   }
 
   const call = (method: string, args: unknown[], keepalive = false): Promise<unknown> => {
+    // The regular look at a linked file only reads. It skips the queue, so a
+    // hanging network drive cannot hold up the saves behind it.
+    if (method === 'getFileInfo') return request(method, args, keepalive)
     const result = queue.then(() => request(method, args, keepalive))
     queue = result.catch(() => {})
     return result
