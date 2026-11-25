@@ -63,7 +63,9 @@ export function createUpdates(
       if (enabled) void check(false)
     },
     restart() {
-      if (status.kind === 'ready') updater.quitAndInstall(true, true)
+      // Not silent: the small progress window of the setup shows that the
+      // update is being installed until the app starts again.
+      if (status.kind === 'ready') updater.quitAndInstall(false, true)
     }
   }
 }
