@@ -3,6 +3,7 @@
   "productName": "Slateforge",
   "version": "1.0.0",
   "description": "Local-first desktop app for tasks and notes",
+  "author": "Sven",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
@@ -12,15 +13,45 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "screenshots": "node scripts/screenshots.mjs",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && electron-builder --win --x64 --publish never"
+  },
+  "build": {
+    "appId": "net.svenlab.slateforge",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "Slateforge-Setup-${version}.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "svenbuild",
+      "repo": "slateforge",
+      "releaseType": "release"
+    }
   },
   "devDependencies": {
-    "@electron/packager": "^20.3.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "playwright-core": "^1.65.1",
     "typescript": "^7.0.2",
@@ -38,6 +69,7 @@
     "@tiptap/pm": "^3.34.0",
     "@tiptap/react": "^3.34.0",
     "@tiptap/starter-kit": "^3.34.0",
+    "electron-updater": "^6.8.11",
     "lucide-react": "^1.74.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

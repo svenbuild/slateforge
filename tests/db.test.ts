@@ -504,16 +504,23 @@ describe('search', () => {
 
 describe('settings and statistics', () => {
   it('stores the theme and the last opened entry', () => {
-    expect(store.getSettings()).toEqual({ theme: 'system', lastItemId: null })
+    expect(store.getSettings()).toEqual({ theme: 'system', lastItemId: null, installUpdatesAutomatically: true })
     const list = store.createItem('list', 'L', null)
     store.setTheme('light')
     store.setLastItem(list.id)
-    expect(store.getSettings()).toEqual({ theme: 'light', lastItemId: list.id })
+    expect(store.getSettings()).toEqual({ theme: 'light', lastItemId: list.id, installUpdatesAutomatically: true })
     store.deleteItem(list.id, false)
     expect(store.getSettings().lastItemId).toBeNull()
     store.setTheme('black')
     expect(store.getSettings().theme).toBe('black')
     expect(() => store.setTheme('pink' as never)).toThrow()
+  })
+
+  it('saves the choice for automatic updates', () => {
+    store.setInstallUpdatesAutomatically(false)
+    expect(store.getSettings().installUpdatesAutomatically).toBe(false)
+    store.setInstallUpdatesAutomatically(true)
+    expect(store.getSettings().installUpdatesAutomatically).toBe(true)
   })
 
   it('counts active entries and tasks', () => {

@@ -8,7 +8,8 @@ import {
   resolveDrop,
   sortTasks,
   todayIso,
-  treeRows
+  treeRows,
+  updateMessage
 } from '../src/shared/logic'
 import type { Item, Task } from '../src/shared/types'
 
@@ -208,5 +209,13 @@ describe('makeSnippet', () => {
 describe('todayIso', () => {
   it('formats the local date', () => {
     expect(todayIso(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+})
+
+describe('updateMessage', () => {
+  it('describes the last update check', () => {
+    expect(updateMessage({ kind: 'current' })).toBe('Slateforge is up to date.')
+    expect(updateMessage({ kind: 'ready', version: '1.0.1' })).toBe('Version 1.0.1 is ready. It installs when Slateforge closes.')
+    expect(updateMessage({ kind: 'error', message: 'Could not check for updates.' })).toBe('Could not check for updates.')
   })
 })

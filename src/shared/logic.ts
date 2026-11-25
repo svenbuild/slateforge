@@ -1,4 +1,4 @@
-import type { Item, Priority, Snippet, SortMode, Task } from './types'
+import type { Item, Priority, Snippet, SortMode, Task, UpdateStatus } from './types'
 
 // Returns a new id list with `id` placed at `toIndex`. Works for moves inside a
 // list and for inserting an id that is not in the list yet.
@@ -123,4 +123,22 @@ export function todayIso(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${now.getFullYear()}-${month}-${day}`
+}
+
+// The line about updates in the settings.
+export function updateMessage(status: UpdateStatus): string {
+  switch (status.kind) {
+    case 'idle':
+      return 'Not checked yet.'
+    case 'checking':
+      return 'Checking for updates…'
+    case 'current':
+      return 'Slateforge is up to date.'
+    case 'downloading':
+      return 'Downloading the update…'
+    case 'ready':
+      return `Version ${status.version} is ready. It installs when Slateforge closes.`
+    case 'error':
+      return status.message
+  }
 }

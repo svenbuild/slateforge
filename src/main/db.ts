@@ -30,7 +30,9 @@ export type Store = Omit<
   | 'pickFiles'
   | 'openFile'
   | 'getViewBase'
->
+> & {
+  setInstallUpdatesAutomatically(enabled: boolean): void
+}
 
 type Row = Record<string, unknown>
 
@@ -735,11 +737,20 @@ export function createStore(db: DatabaseSync): Store {
       const theme = THEMES.includes(values.get('theme') as Theme) ? (values.get('theme') as Theme) : 'system'
       const lastId = Number(values.get('lastItemId'))
       const lastItem = get("SELECT id FROM live_items WHERE id = ? AND type <> 'folder'", lastId || 0)
-      return { theme, lastItemId: lastItem ? lastId : null }
+      return {
+        theme,
+        lastItemId: lastItem ? lastId : null,
+        installUpdatesAutomatically: values.get('installUpdatesAutomatically') !== '0'
+      }
     },
 
     setTheme(theme) {
       setSetting('theme', oneOf(theme, THEMES))
+    },
+
+    setInstallUpdatesAutomatically(enabled) {
+      if (typeof enabled !== 'boolean') throw new Error('Invalid update setting')
+      setSetting('installUpdatesAutomatically', enabled ? '1' : '0')
     },
 
     setLastItem(itemId) {
