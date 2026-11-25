@@ -104,7 +104,7 @@ export function OverviewView(props: {
                       {item && (
                         <span className="entry-chip">
                           <ItemIcon item={item} size={13} />
-                          {item.title}
+                          <span className="inline-text">{item.title}</span>
                         </span>
                       )}
                       <TaskMeta task={task} />
