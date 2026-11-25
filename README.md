@@ -121,3 +121,7 @@ changes may still be in `slateforge.db-wal`.
 | `src/renderer`    | The user interface (React)                                    |
 | `tests`           | Unit tests                                                    |
 | `scripts`         | Screenshot click-through and icon generation                  |
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).
