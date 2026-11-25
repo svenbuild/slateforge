@@ -1,6 +1,7 @@
 import { FolderOpen, Monitor, Moon, MoonStar, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { Stats, Theme } from '../../shared/types'
+import { updateMessage } from '../../shared/logic'
+import type { Stats, Theme, UpdateState } from '../../shared/types'
 import { api } from './api'
 import { applyTheme } from './ui'
 
@@ -11,10 +12,11 @@ const THEME_OPTIONS = [
   { value: 'black', label: 'Black', icon: MoonStar }
 ] as const
 
-export function SettingsView({ version }: { version: number }) {
+export function SettingsView({ version, updateState }: { version: number; updateState: UpdateState | null }) {
   const [theme, setTheme] = useState<Theme>('system')
   const [stats, setStats] = useState<Stats | null>(null)
   const [dataPath, setDataPath] = useState('')
+  const updates = api.updates
 
   useEffect(() => {
     api.getSettings().then((settings) => setTheme(settings.theme))
@@ -77,6 +79,37 @@ export function SettingsView({ version }: { version: number }) {
             ))}
           </div>
         </section>
+
+        {updateState && updates && (
+          <section>
+            <h2>Updates</h2>
+            <p className="hint">Current version {updateState.currentVersion}</p>
+            <p className="hint" role="status">{updateMessage(updateState.status)}</p>
+            <div className="update-controls">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => updates.check()}
+                disabled={updateState.status.kind === 'checking' || updateState.status.kind === 'downloading' || updateState.status.kind === 'ready'}
+              >
+                Check for updates
+              </button>
+              {updateState.status.kind === 'ready' && (
+                <button type="button" className="ghost-button" onClick={() => updates.restart()}>
+                  Restart now
+                </button>
+              )}
+            </div>
+            <label className="update-toggle">
+              <input
+                type="checkbox"
+                checked={updateState.automatic}
+                onChange={(event) => updates.setAutomatic(event.target.checked)}
+              />
+              Install updates automatically
+            </label>
+          </section>
+        )}
 
         <section>
           <h2>Data</h2>

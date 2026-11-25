@@ -120,7 +120,30 @@ export interface FileInfo {
 export interface Settings {
   theme: Theme
   lastItemId: number | null
+  installUpdatesAutomatically: boolean
 }
+
+export type UpdateStatus =
+  | { kind: 'idle' | 'checking' | 'current' | 'downloading' }
+  | { kind: 'ready'; version: string }
+  | { kind: 'error'; message: string }
+
+export interface UpdateState {
+  currentVersion: string
+  automatic: boolean
+  status: UpdateStatus
+}
+
+// Only the installed app window can manage updates, not the browser view.
+export interface UpdateApi {
+  // Null when the app runs from source.
+  getState(): UpdateState | null
+  check(): void
+  setAutomatic(enabled: boolean): void
+  restart(): void
+}
+
+export const UPDATE_METHODS = ['getState', 'check', 'setAutomatic', 'restart'] as const satisfies readonly (keyof UpdateApi)[]
 
 export interface Stats {
   boards: number
@@ -248,10 +271,15 @@ export const API_METHODS = [
   'openInBrowser'
 ] as const satisfies readonly (keyof Api)[]
 
-// The renderer sees every method as async, plus one sync call used while the window closes.
-export type RendererApi = {
-  [K in keyof Api]: (...args: Parameters<Api[K]>) => Promise<Awaited<ReturnType<Api[K]>>>
-} & {
+type AsyncApi<T> = {
+  [K in keyof T]: T[K] extends (...args: infer Args) => infer Result ? (...args: Args) => Promise<Awaited<Result>> : never
+}
+
+// The renderer sees API methods as async, except for saves while the window closes.
+export type RendererApi = AsyncApi<Api> & {
+  updates?: AsyncApi<UpdateApi> & {
+    onChange(callback: (state: UpdateState) => void): () => void
+  }
   // Saves that must not get lost while the window or tab is closing.
   saveNoteSync(itemId: number, contentJson: string, contentText: string): void
   writeFileTextSync(itemId: number, text: string, expected: string): void

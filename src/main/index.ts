@@ -3,9 +3,10 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import iconPath from '../../build/icon.ico?asset'
 import { PAGE_POLICY, pageDocument } from '../shared/page'
-import { API_METHODS, type Api, type Theme } from '../shared/types'
+import { API_METHODS, UPDATE_METHODS, type Api, type Theme } from '../shared/types'
 import { createStore, openDatabase } from './db'
 import { fileInfo, NOT_FOUND, readForEditor, viewFile, writeText, type ViewResult } from './files'
+import { createUpdates } from './updates'
 import { startWebServer, type WebServer } from './web'
 
 // English texts with day-first dates in the built-in date picker.
@@ -228,6 +229,16 @@ function start(): void {
     ipcMain.handle(`api:${method}`, (event, ...args) => {
       checkSender(event.sender)
       return run(method, args)
+    })
+  }
+  // Updates only for the installed app, not when it runs from source.
+  const updates = app.isPackaged
+    ? createUpdates(app.getVersion(), store, (state) => mainWindow?.webContents.send('updates:changed', state))
+    : null
+  for (const method of UPDATE_METHODS) {
+    ipcMain.handle(`updates:${method}`, (event, ...args) => {
+      checkSender(event.sender)
+      return updates ? (updates[method] as (...values: unknown[]) => unknown)(...args) : null
     })
   }
   // Used while the window closes, when an async call could get lost. Only

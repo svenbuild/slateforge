@@ -1,7 +1,7 @@
 import { Search, Undo2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { placeRow } from '../../shared/logic'
-import type { Item, ItemPatch, ItemType, Progress, SearchResult } from '../../shared/types'
+import type { Item, ItemPatch, ItemType, Progress, SearchResult, UpdateState } from '../../shared/types'
 import iconUrl from '../../../assets/icon.svg'
 import { api, inBrowser } from './api'
 import { BoardView } from './BoardView'
@@ -35,6 +35,9 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [folderToDelete, setFolderToDelete] = useState<Item | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null)
+  // Set by "Later": the update then installs when the app closes.
+  const [updateLater, setUpdateLater] = useState(false)
   // Shown while files from outside are dragged over the window.
   const [dropHint, setDropHint] = useState<string | null>(null)
   const linkFiles = useRef<(paths: string[], parentId: number | null) => void>(() => {})
@@ -85,6 +88,14 @@ export function App() {
   }, [openItem])
 
   useEffect(refreshProgress, [refreshProgress, version])
+
+  // Update notices come only from the installed app window.
+  useEffect(() => {
+    if (!api.updates) return
+    const unsubscribe = api.updates.onChange(setUpdateState)
+    void api.updates.getState().then(setUpdateState)
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -326,7 +337,7 @@ export function App() {
             onTasksChanged={refreshProgress}
           />
         )}
-        {view.kind === 'settings' && <SettingsView version={version} />}
+        {view.kind === 'settings' && <SettingsView version={version} updateState={updateState} />}
         {view.kind === 'trash' && <TrashView version={version} onChanged={onTrashChanged} />}
       </main>
       </div>
@@ -356,6 +367,18 @@ export function App() {
               Undo
             </button>
           )}
+        </div>
+      )}
+
+      {!toast && !dropHint && updateState?.status.kind === 'ready' && !updateLater && (
+        <div className="toast update-toast" role="status">
+          Slateforge {updateState.status.version} is ready.
+          <button type="button" className="text-button" onClick={() => api.updates?.restart()}>
+            Restart now
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setUpdateLater(true)}>
+            Later
+          </button>
         </div>
       )}
     </div>

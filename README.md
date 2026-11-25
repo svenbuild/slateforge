@@ -5,6 +5,18 @@
 A Windows desktop app to organize tasks and notes. All data stays on your
 computer: no cloud, no account.
 
+## Install
+
+Download `Slateforge-Setup-x.y.z.exe` from
+[GitHub Releases](https://github.com/svenbuild/slateforge/releases/latest) and
+run it. It installs for your Windows account only (no admin rights) and adds a
+Start menu and a desktop shortcut. The installer is not signed, so Windows
+SmartScreen may warn: choose **More info**, then **Run anyway**.
+
+Updates download in the background. When one is ready, choose **Restart now**,
+or **Later** to install it when you close the app. **Settings > Updates** shows
+the version, checks by hand and turns automatic updates off.
+
 ## Features
 
 - **Sidebar** with boards, lists and notes. Each entry has its own icon and
@@ -42,8 +54,8 @@ computer: no cloud, no account.
 - **Pin** entries to keep them at the top of the sidebar.
 - **Command line tool** for scripts and AI agents, see below.
 - **Own title bar** with the search in the middle.
-- **Settings**: light, dark, black or system design, statistics and the location of
-  the data file.
+- **Settings**: light, dark, black or system design, statistics, updates and the
+  location of the data file.
 
 ## Run from source
 
@@ -64,9 +76,17 @@ Other commands:
 | `npm run build`       | Build the app into `out/`                                |
 | `npm start`           | Start the built app                                      |
 | `npm run screenshots` | Click through the built app and save screenshots         |
-| `npm run package`     | Create `dist/Slateforge-win32-x64/Slateforge.exe`        |
+| `npm run package`     | Build the installer `dist/Slateforge-Setup-x.y.z.exe`    |
 
-The packaged folder can be copied anywhere. Start `Slateforge.exe` inside it.
+## Release
+
+On `main`, run `npm version x.y.z`, then `git push origin main --follow-tags`.
+The `v` tag starts the release workflow on GitHub. It builds the installer and
+uploads it with its `.blockmap` and `latest.yml` to a new GitHub release, where
+the installed apps find it.
+
+To test updates without GitHub, set `SLATEFORGE_UPDATE_URL` to a web folder with
+the `dist/` files of a newer build before starting the installed app.
 
 ## Command line tool for AI agents
 
@@ -86,15 +106,17 @@ It needs Node.js and a built app (`npm run build`).
 ## Where the data lives
 
 One SQLite file: `%APPDATA%\Slateforge\slateforge.db` (the exact path is shown
-in the settings). Copy this file to make a backup.
+in the settings). Copy this file to make a backup. The installed app and the old
+portable folder use the same file. Installing, updating and uninstalling never
+touch it.
 
 ## Code overview
 
 | Path              | Content                                                       |
 | ----------------- | ------------------------------------------------------------- |
-| `src/main`        | Electron main process: window, database (`db.ts`)             |
+| `src/main`        | Electron main process: window, database (`db.ts`), updates    |
 | `src/preload`     | Bridge that gives the window access to the API                |
 | `src/shared`      | Types and pure logic used on both sides (`logic.ts`)          |
 | `src/renderer`    | The user interface (React)                                    |
 | `tests`           | Unit tests                                                    |
-| `scripts`         | Screenshot click-through, packaging, icon generation          |
+| `scripts`         | Screenshot click-through and icon generation                  |

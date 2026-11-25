@@ -13,7 +13,11 @@ const relaxCspInDev: Plugin = {
 export default defineConfig({
   // Two programs: the app itself and the command line tool for AI agents.
   main: {
-    build: { rollupOptions: { input: { index: 'src/main/index.ts', cli: 'src/main/cli.ts' } } }
+    build: {
+      // The installer ships out/ without a separate node_modules folder.
+      externalizeDeps: false,
+      rollupOptions: { input: { index: 'src/main/index.ts', cli: 'src/main/cli.ts' } }
+    }
   },
   preload: {},
   renderer: {
