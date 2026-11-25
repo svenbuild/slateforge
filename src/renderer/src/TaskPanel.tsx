@@ -35,12 +35,15 @@ export function TaskPanel(props: {
         </button>
       </div>
 
-      <input
+      {/* A text area so a long title wraps instead of being cut off. It is still one line of text. */}
+      <textarea
         className="panel-title"
+        rows={1}
         value={task.title}
         placeholder="Title"
         maxLength={200}
-        onChange={(event) => onChange({ title: event.target.value })}
+        onChange={(event) => onChange({ title: event.target.value.replace(/\s*\n\s*/g, ' ') })}
+        onKeyDown={(event) => event.key === 'Enter' && event.preventDefault()}
         onBlur={() => task.title.trim() === '' && onChange({ title: 'Untitled' })}
       />
 

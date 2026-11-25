@@ -1050,7 +1050,7 @@ kbd {
 /* ---- task panel ---- */
 
 .task-panel {
-  width: 340px;
+  width: clamp(280px, 30vw, 340px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1075,8 +1075,12 @@ kbd {
 }
 
 .panel-title {
+  flex-shrink: 0;
+  field-sizing: content;
+  resize: none;
   font-size: 17px;
   font-weight: 600;
+  line-height: 1.35;
   padding: 6px 8px;
   margin: 0 -8px;
   background: transparent;
@@ -1100,9 +1104,14 @@ kbd {
   gap: 10px;
 }
 
+.due-row input {
+  height: 32px;
+}
+
 .panel-description {
-  flex: 1;
-  min-height: 140px;
+  flex-shrink: 0;
+  field-sizing: content;
+  min-height: 160px;
   resize: none;
   line-height: 1.5;
 }
