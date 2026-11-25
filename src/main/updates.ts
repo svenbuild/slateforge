@@ -66,7 +66,9 @@ export function createUpdates(
     setAutomatic(enabled) {
       store.setInstallUpdatesAutomatically(enabled)
       automatic = enabled
-      updater.autoInstallOnAppQuit = enabled
+      // During a download the flag stays on, see check(). It is set to the
+      // setting when the download ends.
+      if (status.kind !== 'downloading') updater.autoInstallOnAppQuit = enabled
       onChange(getState())
       if (enabled) void check(false)
     },

@@ -38,6 +38,8 @@ beforeAll(async () => {
     root: join(dir, 'pages'),
     call: (method, args) => {
       if (method === 'explode') throw new Error('boom')
+      // A read that waits for a file, while the app window changes something.
+      if (method === 'slowRead') return new Promise((resolve) => setTimeout(() => ((changes += 1), resolve('text')), 20))
       calls.push([method, args])
       changes += 1
       return { echoed: args }
@@ -116,6 +118,13 @@ describe('web server', () => {
     expect(response.headers['x-changes']).toBe('1')
     expect(calls).toEqual([['updateTask', [7, { done: true }]]])
     expect((await send('/changes', { headers: withKey() })).body).toBe('1')
+  })
+
+  it('does not count a change made by others while a call waits', async () => {
+    const response = await send('/api/slowRead', { method: 'POST', headers: { ...withKey(), Origin: origin }, body: '[]' })
+    expect(JSON.parse(response.body)).toEqual({ result: 'text' })
+    // The page must still load the change of the app window.
+    expect(response.headers['x-changes']).toBe(response.headers['x-changes-before'])
   })
 
   it('refuses API calls from other websites and under another name', async () => {

@@ -107,16 +107,19 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
       try {
         const args: unknown = JSON.parse(await readBody(request))
         if (!Array.isArray(args)) throw new Error('Invalid arguments')
-        // The call runs in one go, so these two numbers tell exactly whether
-        // it changed the data itself.
+        // A call counts its change at once, before it waits for anything. So
+        // these two numbers, taken around that moment, tell exactly whether
+        // it changed the data itself, even when it then waits for a file.
         const before = options.changes()
         const method = url.pathname.slice('/api/'.length)
         // In the browser the views are reached through this server.
-        const result = method === 'getViewBase' ? viewBase : await options.call(method, args)
+        const pending = method === 'getViewBase' ? viewBase : options.call(method, args)
+        const after = options.changes()
+        const result = await pending
         return send(response, 200, JSON.stringify({ result: result ?? null }), {
           'Content-Type': 'application/json',
           'X-Changes-Before': String(before),
-          'X-Changes': String(options.changes())
+          'X-Changes': String(after)
         })
       } catch (error) {
         return send(response, 500, JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
