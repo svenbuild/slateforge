@@ -17,7 +17,7 @@
     "package": "npm run build && electron-builder --win --x64 --publish never"
   },
   "build": {
-    "appId": "net.svenlab.slateforge",
+    "appId": "com.slateforge.app",
     "npmRebuild": false,
     "directories": {
       "output": "dist"
