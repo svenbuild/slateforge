@@ -430,7 +430,7 @@ export function Sidebar(props: {
       <div className="sidebar-new">
         <button
           type="button"
-          className="ghost-button"
+          className={`ghost-button ${newMenu ? 'open' : ''}`}
           onClick={(event) => {
             // Below the button, or above it when the window is too low for the menu.
             const anchor = event.currentTarget.getBoundingClientRect()
