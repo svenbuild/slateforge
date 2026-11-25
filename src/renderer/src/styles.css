@@ -234,7 +234,7 @@ kbd {
 }
 
 .ghost-button.danger:hover,
-.menu-row.danger:hover {
+.menu-row.danger {
   color: var(--danger);
 }
 
@@ -556,7 +556,8 @@ kbd {
   outline-offset: -2px;
 }
 
-.sidebar-row:hover {
+.sidebar-row:hover,
+.sidebar-row.menu-open {
   background: var(--hover);
 }
 
@@ -729,6 +730,7 @@ kbd {
 }
 
 .sidebar-link {
+  outline-offset: -2px;
   display: flex;
   align-items: center;
   gap: 9px;

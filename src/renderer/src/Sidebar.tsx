@@ -31,6 +31,8 @@ import { InlineEdit } from './ui'
 
 const END_ZONE = 'end'
 const INDENT_PX = 16
+// Height of the "New" menu with its six rows.
+const NEW_MENU_HEIGHT = 210
 
 interface MenuState {
   item: Item
@@ -149,6 +151,8 @@ function SidebarRow(props: {
   depth: number
   openTasks: number
   active: boolean
+  // Its menu is open, so the row shows which entry the menu belongs to.
+  menuOpen: boolean
   renaming: boolean
   draggable: boolean
   dropMode: DropMode | null
@@ -163,6 +167,7 @@ function SidebarRow(props: {
   const classes = [
     'sidebar-row',
     props.active ? 'active' : '',
+    props.menuOpen ? 'menu-open' : '',
     draggable.isDragging ? 'dragging' : '',
     props.dropMode ? `drop-${props.dropMode}` : ''
   ]
@@ -378,7 +383,7 @@ export function Sidebar(props: {
               .map((item) => (
                 <li
                   key={item.id}
-                  className={`sidebar-row pinned ${props.activeId === item.id ? 'active' : ''}`}
+                  className={`sidebar-row pinned ${props.activeId === item.id ? 'active' : ''} ${menu?.item.id === item.id ? 'menu-open' : ''}`}
                   onClick={() => props.onOpen(item.id)}
                   onContextMenu={(event) => {
                     event.preventDefault()
@@ -397,6 +402,7 @@ export function Sidebar(props: {
               depth={depth}
               openTasks={openTasks(item)}
               active={props.activeId === item.id}
+              menuOpen={menu?.item.id === item.id}
               renaming={props.renamingId === item.id}
               draggable={needle === ''}
               dropMode={drop?.targetId === item.id ? drop.mode : null}
@@ -410,6 +416,7 @@ export function Sidebar(props: {
           ))}
           {needle === '' && <EndZone active={drop !== null && drop.targetId === null} />}
           {needle !== '' && rows.length === 0 && <li className="sidebar-empty">No entry matches.</li>}
+          {needle === '' && items.length === 0 && <li className="sidebar-empty">No entries yet. Use "New" below to add one.</li>}
         </ul>
         <DragOverlay dropAnimation={null}>
           {dragItem && (
@@ -425,9 +432,10 @@ export function Sidebar(props: {
           type="button"
           className="ghost-button"
           onClick={(event) => {
-            // Below the button, but never past the lower edge of the window.
+            // Below the button, or above it when the window is too low for the menu.
             const anchor = event.currentTarget.getBoundingClientRect()
-            setNewMenu({ top: Math.min(anchor.bottom + 4, window.innerHeight - 190), left: anchor.left })
+            const below = anchor.bottom + 4 + NEW_MENU_HEIGHT <= window.innerHeight
+            setNewMenu({ top: below ? anchor.bottom + 4 : Math.max(8, anchor.top - 4 - NEW_MENU_HEIGHT), left: anchor.left })
           }}
         >
           <Plus size={14} />
