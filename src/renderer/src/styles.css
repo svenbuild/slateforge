@@ -1555,6 +1555,8 @@ kbd {
 }
 
 .update-toggle input {
+  /* Without the default margin the box lines up with the text above. */
+  margin: 0;
   accent-color: var(--accent);
 }
 
@@ -1830,6 +1832,12 @@ kbd {
   left: auto;
   right: 24px;
   transform: none;
+}
+
+/* The padding of Later stays inside the toast's own padding, so the toast is
+   as high as the other ones and its text keeps the same gaps on both sides. */
+.update-toast .ghost-button {
+  margin: -5px -10px;
 }
 
 /* Shown while files from outside are dragged over the window. */
