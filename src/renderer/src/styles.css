@@ -293,7 +293,7 @@ kbd {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1.5px solid var(--border-strong);
+  border: 1.5px solid var(--text-faint);
   border-radius: 50%;
   color: var(--on-accent);
   flex-shrink: 0;
@@ -837,10 +837,10 @@ kbd {
 
 .task-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-height: 38px;
-  padding: 6px 10px;
+  padding: 9px 10px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
 }
@@ -867,9 +867,24 @@ kbd {
   overflow-wrap: anywhere;
 }
 
+/* Checkbox and chips sit on the first line of a title that wraps. */
+.task-row .check {
+  margin-top: 1px;
+}
+
+.task-row .task-meta,
+.task-row .entry-chip {
+  margin-top: 1px;
+}
+
 .done .task-title {
   color: var(--text-faint);
   text-decoration: line-through;
+}
+
+/* Priority and date of a finished task no longer need attention. */
+.done .task-meta {
+  opacity: 0.6;
 }
 
 .add-task {
@@ -956,7 +971,8 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 8px 6px 12px;
+  min-height: 40px;
+  padding: 10px 10px 6px 12px;
   font-weight: 600;
   cursor: grab;
 }
@@ -968,13 +984,18 @@ kbd {
 }
 
 .column-delete {
-  visibility: hidden;
+  display: none;
   width: 22px;
   height: 22px;
 }
 
-.column:hover .column-delete {
-  visibility: visible;
+.column:hover .column-delete,
+.column-delete:focus-visible {
+  display: inline-flex;
+}
+
+.column:hover .column-header .count {
+  display: none;
 }
 
 .column-cards {
