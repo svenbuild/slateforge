@@ -169,8 +169,8 @@ export interface Api {
   // Links a local file. Its title is the file name.
   createFile(path: string, parentId: number | null): Item
   getFilePath(itemId: number): string
-  getFileInfo(itemId: number): FileInfo
-  readFileText(itemId: number): string
+  getFileInfo(itemId: number): Promise<FileInfo>
+  readFileText(itemId: number): Promise<string>
   // Only for Markdown files that are not on a network drive. `expected` is
   // the text last read or written: a file that another program changed in
   // the meantime is not overwritten.
@@ -178,7 +178,7 @@ export interface Api {
   // Lets the user choose files in a dialog. Returns their paths.
   pickFiles(): Promise<string[]>
   // Opens the file in the program that Windows uses for it.
-  openFile(itemId: number): void
+  openFile(itemId: number): Promise<void>
   // Start of the addresses under which pages and files are shown in a frame.
   getViewBase(): string
 

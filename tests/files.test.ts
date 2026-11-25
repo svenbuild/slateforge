@@ -32,23 +32,23 @@ describe('fileKind', () => {
 })
 
 describe('isNetworkPath', () => {
-  it('finds network paths written with two backslashes', () => {
-    expect(isNetworkPath('\\\\server\\share\\a.md')).toBe(true)
-    expect(isNetworkPath('//server/share/a.md')).toBe(true)
+  it('finds network paths written with two backslashes', async () => {
+    expect(await isNetworkPath('\\\\server\\share\\a.md')).toBe(true)
+    expect(await isNetworkPath('//server/share/a.md')).toBe(true)
   })
 
-  it('finds mapped drive letters through their real path', () => {
-    expect(isNetworkPath('Z:\\a.md', () => '\\\\server\\share\\a.md')).toBe(true)
-    expect(isNetworkPath('C:\\a.md', () => 'C:\\a.md')).toBe(false)
+  it('finds mapped drive letters through their real path', async () => {
+    expect(await isNetworkPath('Z:\\a.md', async () => '\\\\server\\share\\a.md')).toBe(true)
+    expect(await isNetworkPath('C:\\a.md', async () => 'C:\\a.md')).toBe(false)
   })
 
-  it('treats a local file as local', () => {
-    expect(isNetworkPath(file('notes.md'))).toBe(false)
+  it('treats a local file as local', async () => {
+    expect(await isNetworkPath(file('notes.md'))).toBe(false)
   })
 
-  it('counts a path that cannot be looked up as network, to be safe', () => {
+  it('counts a path that cannot be looked up as network, to be safe', async () => {
     expect(
-      isNetworkPath('C:\\a.md', () => {
+      await isNetworkPath('C:\\a.md', async () => {
         throw new Error('no such file')
       })
     ).toBe(true)
@@ -56,20 +56,20 @@ describe('isNetworkPath', () => {
 })
 
 describe('fileInfo', () => {
-  it('describes a file and says if it may be changed', () => {
-    expect(fileInfo(file('notes.md'))).toMatchObject({ name: 'notes.md', kind: 'markdown', exists: true, writable: true })
-    expect(fileInfo(file('notes.md')).modified).toBeGreaterThan(0)
-    expect(fileInfo(file('missing.md')).modified).toBe(0)
-    expect(fileInfo(file('paper.pdf'))).toMatchObject({ kind: 'pdf', exists: true, writable: false })
-    expect(fileInfo(file('missing.md'))).toMatchObject({ exists: false, writable: false })
-    expect(fileInfo(dir)).toMatchObject({ exists: false })
-    expect(fileInfo('')).toMatchObject({ exists: false })
+  it('describes a file and says if it may be changed', async () => {
+    expect(await fileInfo(file('notes.md'))).toMatchObject({ name: 'notes.md', kind: 'markdown', exists: true, writable: true })
+    expect((await fileInfo(file('notes.md'))).modified).toBeGreaterThan(0)
+    expect((await fileInfo(file('missing.md'))).modified).toBe(0)
+    expect(await fileInfo(file('paper.pdf'))).toMatchObject({ kind: 'pdf', exists: true, writable: false })
+    expect(await fileInfo(file('missing.md'))).toMatchObject({ exists: false, writable: false })
+    expect(await fileInfo(dir)).toMatchObject({ exists: false })
+    expect(await fileInfo('')).toMatchObject({ exists: false })
   })
 })
 
 describe('reading and writing', () => {
-  it('reads text and writes Markdown back', () => {
-    expect(readText(file('notes.md'))).toBe('# Notes')
+  it('reads text and writes Markdown back', async () => {
+    expect(await readText(file('notes.md'))).toBe('# Notes')
     writeText(file('notes.md'), '# Changed', '# Notes')
     expect(readFileSync(file('notes.md'), 'utf8')).toBe('# Changed')
   })
@@ -88,16 +88,16 @@ describe('reading and writing', () => {
     expect(readFileSync(file('site', 'index.html'), 'utf8')).toBe('<h1>site</h1>')
   })
 
-  it('keeps the invisible mark at the start of a file and hides it from the editor', () => {
+  it('keeps the invisible mark at the start of a file and hides it from the editor', async () => {
     writeFileSync(file('marked.md'), '\uFEFF# Title')
-    expect(readForEditor(file('marked.md'))).toBe('# Title')
+    expect(await readForEditor(file('marked.md'))).toBe('# Title')
     writeText(file('marked.md'), '# New title', '# Title')
     expect(readFileSync(file('marked.md'), 'utf8')).toBe('\uFEFF# New title')
   })
 
-  it('only takes the mark away at the very start', () => {
+  it('only takes the mark away at the very start', async () => {
     writeFileSync(file('inner.md'), 'a\uFEFFb')
-    expect(readForEditor(file('inner.md'))).toBe('a\uFEFFb')
+    expect(await readForEditor(file('inner.md'))).toBe('a\uFEFFb')
     writeText(file('inner.md'), 'a\uFEFFb!', 'a\uFEFFb')
     expect(readFileSync(file('inner.md'), 'utf8')).toBe('a\uFEFFb!')
   })
@@ -115,39 +115,39 @@ describe('reading and writing', () => {
     expect(readFileSync(file('big.md'), 'utf8')).toBe('small')
   })
 
-  it('refuses text that is not UTF-8 instead of breaking its letters', () => {
+  it('refuses text that is not UTF-8 instead of breaking its letters', async () => {
     // "Größe" saved in the Windows code page, as old editors do
     writeFileSync(file('legacy.md'), Buffer.from([0x47, 0x72, 0xf6, 0xdf, 0x65]))
-    expect(() => readText(file('legacy.md'))).toThrow('UTF-8')
+    await expect(readText(file('legacy.md'))).rejects.toThrow('UTF-8')
     expect(() => writeText(file('legacy.md'), 'x', 'Gr')).toThrow()
     expect(readFileSync(file('legacy.md'))).toEqual(Buffer.from([0x47, 0x72, 0xf6, 0xdf, 0x65]))
   })
 })
 
 describe('viewFile', () => {
-  it('gives an HTML file and what lies next to it', () => {
+  it('gives an HTML file and what lies next to it', async () => {
     const html = file('site', 'index.html')
-    expect(viewFile(html, 'index.html')).toMatchObject({ status: 200, type: 'text/html; charset=utf-8' })
+    expect(await viewFile(html, 'index.html')).toMatchObject({ status: 200, type: 'text/html; charset=utf-8' })
     // locked in, also when opened in a window of its own
-    expect(viewFile(html, 'index.html').policy).toContain('sandbox allow-scripts')
-    expect(viewFile(html, 'index.html').policy).not.toContain('allow-same-origin')
-    expect(viewFile(html, 'style.css')).toMatchObject({ status: 200, type: 'text/css' })
-    expect(viewFile(html, 'img/logo.png')).toMatchObject({ status: 200, type: 'image/png' })
+    expect((await viewFile(html, 'index.html')).policy).toContain('sandbox allow-scripts')
+    expect((await viewFile(html, 'index.html')).policy).not.toContain('allow-same-origin')
+    expect(await viewFile(html, 'style.css')).toMatchObject({ status: 200, type: 'text/css' })
+    expect(await viewFile(html, 'img/logo.png')).toMatchObject({ status: 200, type: 'image/png' })
   })
 
-  it('gives nothing outside the folder and no unknown kinds of files', () => {
+  it('gives nothing outside the folder and no unknown kinds of files', async () => {
     const html = file('site', 'index.html')
-    expect(viewFile(html, '../notes.md').status).toBe(404)
-    expect(viewFile(html, '..\\paper.pdf').status).toBe(404)
-    expect(viewFile(html, 'secret.txt').status).toBe(404)
-    expect(viewFile(html, 'missing.css').status).toBe(404)
-    expect(viewFile(html, '').status).toBe(404)
+    expect((await viewFile(html, '../notes.md')).status).toBe(404)
+    expect((await viewFile(html, '..\\paper.pdf')).status).toBe(404)
+    expect((await viewFile(html, 'secret.txt')).status).toBe(404)
+    expect((await viewFile(html, 'missing.css')).status).toBe(404)
+    expect((await viewFile(html, '')).status).toBe(404)
   })
 
-  it('gives a PDF only itself, and Markdown not at all', () => {
-    expect(viewFile(file('paper.pdf'), 'paper.pdf')).toMatchObject({ status: 200, type: 'application/pdf' })
-    expect(viewFile(file('paper.pdf'), 'paper.pdf').policy).toBeUndefined()
-    expect(viewFile(file('paper.pdf'), 'other.pdf').status).toBe(404)
-    expect(viewFile(file('notes.md'), 'notes.md').status).toBe(404)
+  it('gives a PDF only itself, and Markdown not at all', async () => {
+    expect(await viewFile(file('paper.pdf'), 'paper.pdf')).toMatchObject({ status: 200, type: 'application/pdf' })
+    expect((await viewFile(file('paper.pdf'), 'paper.pdf')).policy).toBeUndefined()
+    expect((await viewFile(file('paper.pdf'), 'other.pdf')).status).toBe(404)
+    expect((await viewFile(file('notes.md'), 'notes.md')).status).toBe(404)
   })
 })

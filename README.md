@@ -86,7 +86,8 @@ It needs Node.js and a built app (`npm run build`).
 ## Where the data lives
 
 One SQLite file: `%APPDATA%\Slateforge\slateforge.db` (the exact path is shown
-in the settings). Copy this file to make a backup.
+in the settings). To make a backup, close the app first and then copy this
+file. While the app runs, the newest changes may still be in `slateforge.db-wal`.
 
 ## Code overview
 

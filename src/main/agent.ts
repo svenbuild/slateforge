@@ -16,6 +16,8 @@ Arguments
   key=value key=value             become one object, e.g. done=true priority=high
   @path                           the text of that file, e.g. @C:\\tmp\\report.html
                                   (also for text that looks like a number or like key=value)
+                                  Text with & | < > ^ or % must go through @path: the .cmd
+                                  wrapper hands arguments to cmd.exe, which acts on these signs.
 Output is JSON. An entry is a board, list, note or page. Ids come from "tree".
 
 Look around

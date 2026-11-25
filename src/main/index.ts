@@ -87,9 +87,23 @@ function createWindow(): void {
   mainWindow.on('closed', () => (mainWindow = null))
 
   // The app only ever shows its own page.
-  // Web links in HTML pages open in the normal browser.
+  // Web links in HTML pages open in the normal browser, after the user agreed.
+  // A script in a page could otherwise send its text out in a link address.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url)
+    if ((url.startsWith('https://') || url.startsWith('http://')) && mainWindow) {
+      dialog
+        .showMessageBox(mainWindow, {
+          type: 'question',
+          message: 'Open this link in your browser?',
+          detail: url.length > 300 ? `${url.slice(0, 300)}...` : url,
+          buttons: ['Open', 'Cancel'],
+          defaultId: 0,
+          cancelId: 1
+        })
+        .then(({ response }) => {
+          if (response === 0) shell.openExternal(url)
+        })
+    }
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
@@ -158,8 +172,8 @@ function start(): void {
     },
     // Documents open in their program. Anything else, which could be a
     // program itself, is only shown in its folder.
-    openFile(itemId) {
-      const info = fileInfo(store.getFilePath(itemId))
+    async openFile(itemId) {
+      const info = await fileInfo(store.getFilePath(itemId))
       if (info.kind === 'other') shell.showItemInFolder(info.path)
       else shell.openPath(info.path)
     },
@@ -181,7 +195,7 @@ function start(): void {
   let webServer: Promise<WebServer> | undefined
 
   // The document for a viewer frame: "page/<id>" or "file/<id>/<path in its folder>".
-  const view = (path: string): ViewResult => {
+  const view = async (path: string): Promise<ViewResult> => {
     const [kind, idText, ...rest] = path.split('/')
     const itemId = Number(idText)
     try {
@@ -189,14 +203,14 @@ function start(): void {
         const title = store.listItems().find((item) => item.id === itemId)?.title ?? ''
         return { status: 200, type: 'text/html; charset=utf-8', body: pageDocument(title, store.getPage(itemId)), policy: PAGE_POLICY }
       }
-      if (kind === 'file') return viewFile(store.getFilePath(itemId), rest.map(decodeURIComponent).join('/'))
+      if (kind === 'file') return await viewFile(store.getFilePath(itemId), rest.map(decodeURIComponent).join('/'))
     } catch {
       // An unknown or trashed entry is simply not found.
     }
     return NOT_FOUND
   }
-  protocol.handle(VIEW_SCHEME, (request) => {
-    const result = view(new URL(request.url).pathname.slice(1))
+  protocol.handle(VIEW_SCHEME, async (request) => {
+    const result = await view(new URL(request.url).pathname.slice(1))
     return new Response(result.body as BodyInit, {
       status: result.status,
       headers: { 'Content-Type': result.type, ...(result.policy ? { 'Content-Security-Policy': result.policy } : {}) }

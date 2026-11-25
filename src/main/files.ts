@@ -1,9 +1,12 @@
-import { existsSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import type { FileInfo, FileKind } from '../shared/types'
 
 // Linked local files: what kind they are, reading, writing and handing them
 // to the viewer. Files stay where they are, the app only keeps their path.
+// Everything the app does while showing a file runs async, so a slow or lost
+// network drive never freezes the window.
 
 const MAX_TEXT_BYTES = 5_000_000
 // Marks some UTF-8 files at their very start. It is kept, but not shown.
@@ -59,39 +62,52 @@ export function fileKind(path: string): FileKind {
 // link that leads to a network share, is found through the real path, which
 // then starts with two backslashes. When the real path cannot be found out,
 // the file counts as being on the network, to be on the safe side.
-export function isNetworkPath(path: string, realPath: (path: string) => string = realpathSync.native): boolean {
+export async function isNetworkPath(path: string, realPath: (path: string) => Promise<string> = realpath): Promise<boolean> {
   if (path.startsWith('\\\\') || path.startsWith('//')) return true
   try {
-    return realPath(path).startsWith('\\\\')
+    return (await realPath(path)).startsWith('\\\\')
   } catch {
     return true
   }
 }
 
-export function fileInfo(path: string): FileInfo {
+export async function fileInfo(path: string): Promise<FileInfo> {
   const kind = fileKind(path)
-  const stats = path !== '' && existsSync(path) ? statSync(path) : null
+  const stats = path === '' ? null : await stat(path).catch(() => null)
   const exists = stats !== null && stats.isFile()
   return {
     path,
     name: basename(path),
     kind,
     exists,
-    writable: exists && kind === 'markdown' && !isNetworkPath(path),
+    writable: exists && kind === 'markdown' && !(await isNetworkPath(path)),
     modified: exists ? stats.mtimeMs : 0
   }
 }
 
-// Reads a text file. Only UTF-8 is understood: anything else would come out
-// with broken letters and must never be written back like that.
-export function readText(path: string): string {
-  if (statSync(path).size > MAX_TEXT_BYTES) throw new Error('The file is too large to show here.')
+// Only UTF-8 is understood: anything else would come out with broken letters
+// and must never be written back like that.
+function checkSize(size: number): void {
+  if (size > MAX_TEXT_BYTES) throw new Error('The file is too large to show here.')
+}
+function decodeText(data: Buffer): string {
   try {
     // The mark at the start is kept in the text, so it can be written back.
-    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(readFileSync(path))
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(data)
   } catch {
     throw new Error('This file is not saved as UTF-8 text, so it cannot be shown or changed here.')
   }
+}
+
+export async function readText(path: string): Promise<string> {
+  checkSize((await stat(path)).size)
+  return decodeText(await readFile(path))
+}
+
+// Saving reads at once, because it must also work while the window closes.
+function readTextNow(path: string): string {
+  checkSize(statSync(path).size)
+  return decodeText(readFileSync(path))
 }
 
 // Writes a Markdown file back. `expected` is the text the editor last read
@@ -108,7 +124,7 @@ export function writeText(path: string, text: string, expected: string): void {
   const real = realpathSync.native(path)
   if (real.startsWith('\\\\')) throw new Error('Files on network drives are never changed.')
   if (fileKind(path) !== 'markdown' || fileKind(real) !== 'markdown') throw new Error('Only Markdown files can be changed.')
-  const current = readText(real)
+  const current = readTextNow(real)
   if (withoutMark(current) !== expected) {
     throw new Error('The file was changed by another program. Open it again to see the new text.')
   }
@@ -125,28 +141,28 @@ export function writeText(path: string, text: string, expected: string): void {
 }
 
 // The text for the editor: without the invisible mark at the start.
-export function readForEditor(path: string): string {
-  return withoutMark(readText(path))
+export async function readForEditor(path: string): Promise<string> {
+  return withoutMark(await readText(path))
 }
 
 // Hands a linked file to the viewer. `wantedPath` is the path the viewer
 // asked for, starting at the folder of the linked file. A PDF only gives
 // itself, an HTML file also what really lies in its folder or below (styles,
 // scripts, pictures). Links that lead out of the folder are not followed.
-export function viewFile(path: string, wantedPath: string): ViewResult {
+export async function viewFile(path: string, wantedPath: string): Promise<ViewResult> {
   const kind = fileKind(path)
   if (kind !== 'html' && kind !== 'pdf') return NOT_FOUND
   try {
-    const file = realpathSync.native(path)
+    const file = await realpath(path)
     const folder = dirname(file)
-    const wanted = realpathSync.native(resolve(dirname(resolve(path)), wantedPath))
+    const wanted = await realpath(resolve(dirname(resolve(path)), wantedPath))
     const inFolder = relative(folder, wanted)
     const inside = inFolder !== '' && !inFolder.startsWith('..') && !isAbsolute(inFolder)
     if (!inside || (kind === 'pdf' && wanted !== file)) return NOT_FOUND
     const type = CONTENT_TYPES[extname(wanted).toLowerCase()]
-    if (!type || !statSync(wanted).isFile()) return NOT_FOUND
+    if (!type || !(await stat(wanted)).isFile()) return NOT_FOUND
     // The PDF viewer needs its frame as it is. Everything else is locked in.
-    return { status: 200, type, body: readFileSync(wanted), ...(type === 'application/pdf' ? {} : { policy: FILE_POLICY }) }
+    return { status: 200, type, body: await readFile(wanted), ...(type === 'application/pdf' ? {} : { policy: FILE_POLICY }) }
   } catch {
     // The file or the asked part does not exist.
     return NOT_FOUND

@@ -36,7 +36,7 @@ export interface WebServerOptions {
   // A number that grows with every change of the data.
   changes: () => number
   // Gives the document for a viewer frame, for example "page/12".
-  view: (path: string) => ViewResult
+  view: (path: string) => Promise<ViewResult>
 }
 
 export interface WebServer {
@@ -93,7 +93,7 @@ export function startWebServer(options: WebServerOptions): Promise<WebServer> {
     }
 
     if (request.method === 'GET' && url.pathname.startsWith(viewBase)) {
-      const result = options.view(url.pathname.slice(viewBase.length))
+      const result = await options.view(url.pathname.slice(viewBase.length))
       return send(response, result.status, result.body, {
         'Content-Type': result.type,
         'X-Frame-Options': 'SAMEORIGIN',
