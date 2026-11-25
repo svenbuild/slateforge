@@ -609,7 +609,7 @@ try {
   check(written.includes('# Meeting notes') && written.includes('first point') && written.includes('- second point from Slateforge'), 'editing a Markdown file writes it back as Markdown')
   check(written.includes('- first point: A -> B, R&D, 3 < 5') && (await page.locator('.editor-notice').count()) === 0, 'plain signs like -> and & stay as they are and do not lock the file')
   // another program changes the file while it is open
-  const withTable = '# Changed outside\n\n| DID | Problem |\n| --- | --- |\n| 0x0204 | LCD status |\n| 0xFEB0 | EOL adjust |\n\nText after the table.\n'
+  const withTable = '# Changed outside\n\n| Fruit | Amount |\n| --- | --- |\n| Apples | 12 |\n| Pears | 7 |\n\nText after the table.\n'
   writeFileSync(mdFile, withTable)
   await page.locator('.note-content h1', { hasText: 'Changed outside' }).waitFor()
   check(true, 'a Markdown file changed outside shows its new text by itself')
@@ -622,7 +622,7 @@ try {
   await page.keyboard.type('!')
   await page.waitForTimeout(900)
   const afterEdit = readFileSync(mdFile, 'utf8')
-  check(afterEdit.includes('# Changed outside!') && afterEdit.includes('0x0204') && afterEdit.includes('EOL adjust') && afterEdit.includes('Text after the table.'), 'editing keeps the table in the file')
+  check(afterEdit.includes('# Changed outside!') && afterEdit.includes('| Apples | 12 |') && afterEdit.includes('Pears') && afterEdit.includes('Text after the table.'), 'editing keeps the table in the file')
   await shot('file-markdown')
 
   // drag the right edge of the first column to make it wider
