@@ -465,6 +465,8 @@ kbd {
 /* Views with a narrow body keep their header actions above the content. */
 .view:has(> .list-body, > .trash-body, > .overview-body, > .settings-body) > .view-header {
   max-width: var(--content-width);
+  /* Room for the scrollbar of the body below, see .view-body. */
+  padding-right: 38px;
 }
 
 .view-header h1 {
@@ -490,6 +492,15 @@ kbd {
   min-height: 0;
   overflow: auto;
   padding: 4px 28px 28px;
+}
+
+/* A narrow body keeps the room for its scrollbar, so its right edge stays
+   in line with the header whether it scrolls or not. */
+.list-body,
+.trash-body,
+.overview-body,
+.settings-body {
+  scrollbar-gutter: stable;
 }
 
 /* ---- sidebar ---- */
@@ -895,8 +906,8 @@ kbd {
 }
 
 /* Priority and date of a finished task no longer need attention. */
-.done .task-meta {
-  opacity: 0.6;
+.done .task-meta .pill {
+  color: var(--text-faint);
 }
 
 .add-task {
@@ -926,9 +937,10 @@ kbd {
 .section-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* Chevron under the checkboxes, label in line with the task titles. */
+  gap: 12px;
   margin: 18px 0 6px;
-  padding: 4px 8px;
+  padding: 4px 8px 4px 12px;
   border-radius: 6px;
   color: var(--text-muted);
   font-weight: 600;
@@ -945,6 +957,13 @@ kbd {
   gap: 8px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* With the task panel open in a small window the title needs the room. */
+@media (max-width: 1100px) {
+  .view-with-panel:has(> .task-panel) .sort-label {
+    display: none;
+  }
 }
 
 .sort-select select {
