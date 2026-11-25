@@ -64,7 +64,7 @@ export function OverviewView(props: {
     return (
       <div className="empty-state">
         <h1>Welcome to Slateforge</h1>
-        <p>Create a board, a list or a note to get started.</p>
+        <p>Create your first entry to get started.</p>
         <div className="empty-actions">
           {ENTRY_TYPES.map((type) => (
             <button key={type} type="button" className="primary-button" onClick={() => props.onCreate(type)}>
@@ -81,7 +81,7 @@ export function OverviewView(props: {
       <header className="view-header">
         <h1>Overview</h1>
         <span className="overview-date">
-          {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </span>
       </header>
       <div className="view-body overview-body">
