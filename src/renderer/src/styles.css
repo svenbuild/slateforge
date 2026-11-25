@@ -1223,7 +1223,9 @@ kbd {
 }
 
 .note-content ul[data-type='taskList'] li > label {
-  margin-top: 0.3em;
+  display: flex;
+  height: 1.65em;
+  align-items: center;
   user-select: none;
 }
 
@@ -1233,11 +1235,41 @@ kbd {
 }
 
 .note-content ul[data-type='taskList'] input {
-  width: 15px;
-  height: 15px;
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  accent-color: var(--accent);
+  padding: 0;
+  border: 1.5px solid var(--text-faint);
+  border-radius: 4px;
+  background: transparent;
   cursor: pointer;
+}
+
+.note-content ul[data-type='taskList'] input:hover {
+  border-color: var(--accent);
+}
+
+.note-content ul[data-type='taskList'] input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.note-content ul[data-type='taskList'] input:checked::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  margin-top: -2px;
+  border: solid var(--on-accent);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+.note-content ul[data-type='taskList'] input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .note-content ul[data-type='taskList'] li[data-checked='true'] > div {
