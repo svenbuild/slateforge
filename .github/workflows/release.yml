@@ -20,6 +20,14 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The draft exists before the upload starts. Otherwise electron-builder
+      # uploads its files in parallel and can create two releases at once.
+      - run: gh release create ${{ github.ref_name }} --draft --title "Slateforge ${{ github.ref_name }}" --notes ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --x64 --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: gh release edit ${{ github.ref_name }} --draft=false --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
