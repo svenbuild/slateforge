@@ -43,7 +43,7 @@ beforeAll(async () => {
       return { echoed: args }
     },
     changes: () => changes,
-    view: (path) =>
+    view: async (path) =>
       path === 'page/7'
         ? { status: 200, type: 'text/html; charset=utf-8', body: '<h1>page 7</h1>', policy: "default-src 'none'" }
         : { status: 404, type: 'text/plain', body: 'Not found' }
