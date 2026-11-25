@@ -833,10 +833,8 @@ try {
       await page.locator('.task-row').first().click()
       await galleryShot('list-long-task-panel')
       await page.keyboard.press('Escape')
-      await page.locator('.section-toggle').click()
       await page.locator('.view-body').evaluate((node) => node.scrollTo(0, node.scrollHeight))
       await galleryShot('list-long-done')
-      await page.locator('.section-toggle').click()
 
       await open('Shopping')
       await galleryShot('list')
