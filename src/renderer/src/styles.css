@@ -10,14 +10,20 @@
   --border: #30323a;
   --border-strong: #454852;
   --text: #e9eaee;
-  --text-muted: #9698a3;
-  --text-faint: #6c6e79;
+  --text-muted: #a0a2ad;
+  --text-faint: #858792;
   --hover: rgba(255, 255, 255, 0.06);
   --selected: rgba(139, 124, 246, 0.18);
-  --accent: #8b7cf6;
+  --accent: #9586f6;
   --accent-strong: #7a69f2;
+  /* Backgrounds with white text on them. Darker than the text colors so the
+     text keeps a contrast of at least 4.5:1. */
+  --accent-fill: #6a5ae8;
+  --accent-fill-hover: #5d4cdc;
+  --danger-fill: #d13b48;
+  --danger-fill-hover: #bd2f3c;
   --on-accent: #ffffff;
-  --danger: #f0616d;
+  --danger: #f07581;
   --warning: #e0a63a;
   --info: #6aa5f8;
   --mark: rgba(224, 166, 58, 0.35);
@@ -36,16 +42,20 @@
     --border: #e3e3e8;
     --border-strong: #c9c9d1;
     --text: #1d1e23;
-    --text-muted: #62646e;
-    --text-faint: #8f919b;
+    --text-muted: #565862;
+    --text-faint: #6e707a;
     --hover: rgba(0, 0, 0, 0.05);
     --selected: rgba(109, 91, 217, 0.12);
     --accent: #6d5bd9;
     --accent-strong: #5d4bc9;
+    --accent-fill: #6d5bd9;
+    --accent-fill-hover: #5d4bc9;
+    --danger-fill: #d13b48;
+    --danger-fill-hover: #bd2f3c;
     --on-accent: #ffffff;
-    --danger: #d13b48;
-    --warning: #a96f06;
-    --info: #2f6fd0;
+    --danger: #c92f3c;
+    --warning: #94600a;
+    --info: #2a66c4;
     --mark: rgba(240, 190, 60, 0.45);
     --shadow: 0 12px 40px rgba(20, 20, 40, 0.18);
   }
@@ -61,8 +71,8 @@
   --border: #1e1e1e;
   --border-strong: #353535;
   --text: #ededed;
-  --text-muted: #8e8e8e;
-  --text-faint: #636363;
+  --text-muted: #9c9c9c;
+  --text-faint: #7c7c7c;
   --hover: rgba(255, 255, 255, 0.07);
   --selected: rgba(255, 255, 255, 0.11);
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.85);
@@ -227,13 +237,13 @@ kbd {
 }
 
 .primary-button {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent);
   padding: 7px 14px;
 }
 
 .primary-button:hover {
-  background: var(--accent-strong);
+  background: var(--accent-fill-hover);
 }
 
 .text-button {
@@ -686,7 +696,7 @@ kbd {
   user-select: text;
 }
 
-.page-empty {
+.empty-text.page-empty {
   padding: 4px 28px;
 }
 
@@ -1550,13 +1560,10 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: 220px;
+  min-width: 0;
+  max-width: min(220px, 30%);
   font-size: 12.5px;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
 }
 
 .progress-list li {
@@ -1645,12 +1652,11 @@ kbd {
 }
 
 .primary-button.danger {
-  background: var(--danger);
+  background: var(--danger-fill);
 }
 
 .primary-button.danger:hover {
-  background: var(--danger);
-  filter: brightness(0.92);
+  background: var(--danger-fill-hover);
 }
 
 /* ---- empty state and toast ---- */
