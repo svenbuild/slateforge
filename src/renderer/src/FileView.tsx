@@ -52,19 +52,29 @@ export function FileView({ item, version, onUpdateItem }: ViewProps) {
   }, [item.id, version])
 
   // Looks at the file every moment. When another program changed it, the
-  // view shows the new content by itself.
+  // view shows the new content by itself. The next look only starts after the
+  // last one answered, so a hanging network drive never piles up requests.
   useEffect(() => {
-    const timer = window.setInterval(async () => {
+    let timer = 0
+    let stopped = false
+    const look = async (): Promise<void> => {
       const now = await api.getFileInfo(item.id).catch(() => null)
-      if (!now) return
-      setInfo((before) => {
-        if (!before || (before.modified === now.modified && before.exists === now.exists)) return before
-        setFileVersion((current) => current + 1)
-        setReloads((current) => current + 1)
-        return now
-      })
-    }, WATCH_MS)
-    return () => window.clearInterval(timer)
+      if (stopped) return
+      if (now) {
+        setInfo((before) => {
+          if (!before || (before.modified === now.modified && before.exists === now.exists)) return before
+          setFileVersion((current) => current + 1)
+          setReloads((current) => current + 1)
+          return now
+        })
+      }
+      timer = window.setTimeout(look, WATCH_MS)
+    }
+    timer = window.setTimeout(look, WATCH_MS)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
   }, [item.id])
 
   const address = info && `${base}file/${item.id}/${encodeURIComponent(info.name)}?reload=${reloads}`

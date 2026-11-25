@@ -126,7 +126,7 @@ export function todayIso(now = new Date()): string {
 }
 
 // The line about updates in the settings.
-export function updateMessage(status: UpdateStatus): string {
+export function updateMessage(status: UpdateStatus, automatic: boolean): string {
   switch (status.kind) {
     case 'idle':
       return 'Not checked yet.'
@@ -137,7 +137,9 @@ export function updateMessage(status: UpdateStatus): string {
     case 'downloading':
       return 'Downloading the update…'
     case 'ready':
-      return `Version ${status.version} is ready. It installs when Slateforge closes.`
+      return automatic
+        ? `Version ${status.version} is ready. It installs when Slateforge closes.`
+        : `Version ${status.version} is ready. Choose Restart now to install it.`
     case 'error':
       return status.message
   }

@@ -214,8 +214,9 @@ describe('todayIso', () => {
 
 describe('updateMessage', () => {
   it('describes the last update check', () => {
-    expect(updateMessage({ kind: 'current' })).toBe('Slateforge is up to date.')
-    expect(updateMessage({ kind: 'ready', version: '1.0.1' })).toBe('Version 1.0.1 is ready. It installs when Slateforge closes.')
-    expect(updateMessage({ kind: 'error', message: 'Could not check for updates.' })).toBe('Could not check for updates.')
+    expect(updateMessage({ kind: 'current' }, true)).toBe('Slateforge is up to date.')
+    expect(updateMessage({ kind: 'ready', version: '1.0.1' }, true)).toBe('Version 1.0.1 is ready. It installs when Slateforge closes.')
+    expect(updateMessage({ kind: 'ready', version: '1.0.1' }, false)).toBe('Version 1.0.1 is ready. Choose Restart now to install it.')
+    expect(updateMessage({ kind: 'error', message: 'Could not check for updates.' }, true)).toBe('Could not check for updates.')
   })
 })

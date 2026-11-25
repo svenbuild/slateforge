@@ -36,7 +36,7 @@ export function App() {
   const [folderToDelete, setFolderToDelete] = useState<Item | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [updateState, setUpdateState] = useState<UpdateState | null>(null)
-  // Set by "Later": the update then installs when the app closes.
+  // Set by "Later": hides the notice. Settings > Updates still offers the restart.
   const [updateLater, setUpdateLater] = useState(false)
   // Shown while files from outside are dragged over the window.
   const [dropHint, setDropHint] = useState<string | null>(null)

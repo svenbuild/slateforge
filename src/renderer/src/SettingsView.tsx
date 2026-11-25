@@ -84,7 +84,7 @@ export function SettingsView({ version, updateState }: { version: number; update
           <section>
             <h2>Updates</h2>
             <p className="hint">Current version {updateState.currentVersion}</p>
-            <p className="hint" role="status">{updateMessage(updateState.status)}</p>
+            <p className="hint" role="status">{updateMessage(updateState.status, updateState.automatic)}</p>
             <div className="update-controls">
               <button
                 type="button"

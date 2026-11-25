@@ -6,8 +6,8 @@ const FIRST_CHECK_MS = 5_000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 // Checks GitHub Releases for a newer version and downloads it in the
-// background. A downloaded update installs on "Restart now" or when the app
-// quits. SLATEFORGE_UPDATE_URL points to another folder for testing.
+// background. A downloaded update installs on "Restart now", or when the app
+// quits if automatic updates are on. SLATEFORGE_UPDATE_URL points to another folder for testing.
 export function createUpdates(
   currentVersion: string,
   store: Pick<Store, 'getSettings' | 'setInstallUpdatesAutomatically'>,
@@ -22,6 +22,8 @@ export function createUpdates(
   updater.on('error', () => {})
 
   let automatic = store.getSettings().installUpdatesAutomatically
+  // With automatic updates off, a downloaded update only installs on "Restart now".
+  updater.autoInstallOnAppQuit = automatic
   let status: UpdateStatus = { kind: 'idle' }
 
   const getState = (): UpdateState => ({ currentVersion, automatic, status })
@@ -56,6 +58,7 @@ export function createUpdates(
     setAutomatic(enabled) {
       store.setInstallUpdatesAutomatically(enabled)
       automatic = enabled
+      updater.autoInstallOnAppQuit = enabled
       onChange(getState())
       if (enabled) void check(false)
     },

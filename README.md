@@ -81,6 +81,8 @@ Other commands:
 ## Release
 
 On `main`, run `npm version x.y.z`, then `git push origin main --follow-tags`.
+For the first release, the version is already 1.0.0: run
+`git tag -a v1.0.0 -m v1.0.0` and `git push origin v1.0.0` instead.
 The `v` tag starts the release workflow on GitHub. It builds the installer and
 uploads it with its `.blockmap` and `latest.yml` to a new GitHub release, where
 the installed apps find it.
