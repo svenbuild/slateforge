@@ -1245,13 +1245,14 @@ kbd {
 
 .note-content ul[data-type='taskList'] {
   list-style: none;
-  padding-left: 0.2em;
+  padding-left: 0;
 }
 
+/* The text starts where the text of bullet and numbered lists starts. */
 .note-content ul[data-type='taskList'] li {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: calc(1.5em - 16px);
 }
 
 .note-content ul[data-type='taskList'] li > label {
@@ -1387,7 +1388,7 @@ kbd {
   font-size: 0.9em;
   background: var(--hover);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 1px 4px;
 }
 
 .note-content pre {
