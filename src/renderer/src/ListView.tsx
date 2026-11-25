@@ -117,8 +117,8 @@ export function ListView({ item, version, focusTask, onUpdateItem, onDeleted, on
       <div className="view">
         <ViewHeader item={item} onUpdateItem={onUpdateItem}>
           <label className="sort-select">
-            Sort
-            <select value={item.sortMode} onChange={(event) => onUpdateItem({ sortMode: event.target.value as SortMode })}>
+            <span className="sort-label">Sort</span>
+            <select aria-label="Sort" value={item.sortMode} onChange={(event) => onUpdateItem({ sortMode: event.target.value as SortMode })}>
               <option value="manual">Manual</option>
               <option value="due">Due date</option>
               <option value="priority">Priority</option>

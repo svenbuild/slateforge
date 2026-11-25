@@ -65,6 +65,7 @@ export function TrashView({ version, onChanged }: { version: number; onChanged: 
                 Restore
               </button>
               <button type="button" className="ghost-button danger" onClick={() => purge(entry)}>
+                <Trash2 size={15} />
                 Delete forever
               </button>
             </li>

@@ -107,6 +107,26 @@ try {
 
   // ---- empty app ----
   check((await texts('.empty-state h1'))[0] === 'Welcome to Slateforge' || (await page.locator('.settings-body').count()) === 1, 'app starts empty')
+  // the empty app in all themes, small and large (part of the gallery below)
+  mkdirSync(join(outDir, 'gallery'), { recursive: true })
+  for (const [size, width, height] of [
+    ['small', 900, 600],
+    ['large', 1440, 900]
+  ]) {
+    await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [width, height])
+    for (const theme of ['Light', 'Dark', 'Black']) {
+      await setTheme(theme)
+      await page.locator('.sidebar-tools button[title="Overview"]').click()
+      await page.locator('.empty-state').waitFor()
+      await page.waitForTimeout(250)
+      await page.screenshot({ path: join(outDir, 'gallery', `${size}-${theme.toLowerCase()}-welcome.png`) })
+      await page.locator('.sidebar-link', { hasText: 'Trash' }).click()
+      await page.waitForTimeout(250)
+      await page.screenshot({ path: join(outDir, 'gallery', `${size}-${theme.toLowerCase()}-empty-trash.png`) })
+    }
+  }
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1240, 800))
+  await setTheme('Dark')
 
   // ---- board ----
   await createEntry('Board', 'Website relaunch')
@@ -728,6 +748,167 @@ try {
   check((await texts('.column-header .inline-text')).join() === 'Done,To do,In progress,Review', 'columns and their order survive a restart')
   check((await texts('.column:nth-of-type(2) .card .task-title')).join() === 'Plan launch newsletter,Write landing page text', 'card order survives a restart')
   await shot('after-restart-light')
+
+  // ---- gallery: every view and state in all themes, in a small and a large window ----
+  // More data for states the click-through above does not show.
+  const longList = JSON.parse(cli('createItem', 'list', 'Ideas for the summer garden party with the whole neighborhood and friends', 'null'))
+  const longTasks = [
+    'Ask everyone for food allergies and preferences before buying anything for the buffet',
+    'Rent tables',
+    'Buy paper lanterns',
+    'Check the weather forecast',
+    'Borrow the big grill from Tom',
+    'Print invitations',
+    'Make a playlist',
+    'Buy ice',
+    'Clean the terrace',
+    'Set up the tent',
+    'Order the cake',
+    'Plan games for the kids',
+    'Prepare the guest list',
+    'Find enough chairs',
+    'Fairy lights for the trees',
+    'Supersuperlongwordwithoutanyspacesthatcouldbreakthelayoutofthelist'
+  ]
+  for (const [index, title] of longTasks.entries()) {
+    const task = JSON.parse(cli('createTask', String(longList.id), 'null', title))
+    if (index % 5 === 0) cli('updateTask', String(task.id), 'priority=high', `dueDate=${day(index - 3)}`)
+    if (index % 4 === 1) cli('updateTask', String(task.id), 'priority=low')
+    if (index % 6 === 3) cli('updateTask', String(task.id), 'done=true')
+  }
+  cli('updateItem', String(longList.id), 'icon=gift', 'color=orange')
+  cli('createItem', 'board', 'Empty board', 'null')
+  cli('createItem', 'list', 'Empty list', 'null')
+  cli('createItem', 'note', 'Empty note', 'null')
+  cli('createItem', 'page', 'Empty page', 'null')
+  cli('createPage', 'Weekly report', 'null', `@${reportFile}`)
+  const goneFile = join(dataDir, 'gone.md')
+  writeFileSync(goneFile, '# Gone\n')
+  cli('createFile', goneFile, 'null')
+  rmSync(goneFile)
+  await row('gone.md').waitFor()
+
+  const galleryDir = join(outDir, 'gallery')
+  mkdirSync(galleryDir, { recursive: true })
+  const resize = async (width, height) => {
+    await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [width, height])
+    await page.waitForTimeout(300)
+  }
+  let galleryName = ''
+  const galleryShot = async (name) => {
+    await page.mouse.move(0, 0)
+    await page.waitForTimeout(250)
+    await page.screenshot({ path: join(galleryDir, `${galleryName}-${name}.png`) })
+  }
+  const open = async (title) => {
+    await row(title).click()
+    await page.waitForTimeout(200)
+  }
+  for (const [size, width, height] of [
+    ['small', 900, 600],
+    ['large', 1440, 900]
+  ]) {
+    await resize(width, height)
+    for (const theme of ['Light', 'Dark', 'Black']) {
+      await setTheme(theme)
+      galleryName = `${size}-${theme.toLowerCase()}`
+      await galleryShot('settings')
+      await page.locator('.sidebar-tools button[title="Overview"]').click()
+      await page.locator('.due-group').first().waitFor()
+      await galleryShot('overview')
+
+      await open('Website relaunch')
+      await page.locator('.column').first().waitFor()
+      await galleryShot('board')
+      await page.locator('.card', { hasText: 'Write landing page text' }).hover()
+      await page.waitForTimeout(150)
+      await page.screenshot({ path: join(galleryDir, `${galleryName}-board-hover.png`) })
+      await page.locator('.card', { hasText: 'Write landing page text' }).click()
+      await galleryShot('board-task-panel')
+      await page.keyboard.press('Escape')
+
+      await open('Ideas for the summer garden party with the whole neighborhood and friends')
+      await page.locator('.task-row').first().waitFor()
+      await galleryShot('list-long')
+      await page.locator('.task-row').first().click()
+      await galleryShot('list-long-task-panel')
+      await page.keyboard.press('Escape')
+      await page.locator('.view-body').evaluate((node) => node.scrollTo(0, node.scrollHeight))
+      await galleryShot('list-long-done')
+
+      await open('Shopping')
+      await galleryShot('list')
+      await open('Garden ideas')
+      await page.locator('.note-content h1').waitFor()
+      await galleryShot('note')
+      await open('Weekly report')
+      await page.frameLocator('.page-frame').locator('h1').waitFor()
+      await galleryShot('page')
+      await page.locator('.view-header button', { hasText: 'Edit HTML' }).click()
+      await galleryShot('page-edit')
+      await page.locator('.view-header button', { hasText: 'Show page' }).click()
+      await open('gone.md')
+      await galleryShot('file-missing')
+      await open('Empty board')
+      await galleryShot('empty-board')
+      await open('Empty list')
+      await galleryShot('empty-list')
+      await open('Empty note')
+      await galleryShot('empty-note')
+      await open('Empty page')
+      await galleryShot('empty-page')
+
+      await page.keyboard.press('Control+K')
+      await page.locator('.search-dialog').waitFor()
+      await galleryShot('search-start')
+      await page.locator('.search-input input').fill('garden')
+      await page.locator('.search-results li').first().waitFor()
+      await galleryShot('search')
+      await page.locator('.search-input input').fill('xyzzy')
+      await galleryShot('search-nothing')
+      await page.keyboard.press('Escape')
+
+      await row('Garden ideas').hover()
+      await row('Garden ideas').locator('.row-menu').click()
+      await galleryShot('item-menu')
+      await page.keyboard.press('Escape')
+      await row('Home').click({ button: 'right' })
+      await galleryShot('folder-menu')
+      await page.keyboard.press('Escape')
+      await page.locator('.sidebar-new > button').click()
+      await galleryShot('new-menu')
+      await page.locator('.menu-backdrop').click()
+      await row('Home').click({ button: 'right' })
+      await page.locator('.menu-row.danger').click()
+      await galleryShot('folder-delete-dialog')
+      await page.keyboard.press('Escape')
+
+      await page.locator('.sidebar-tools button[title="Filter entries"]').click()
+      await page.locator('.sidebar-filter').fill('zzz')
+      await galleryShot('sidebar-filter-nothing')
+      await page.keyboard.press('Escape')
+
+      await open('Shopping')
+      await page.locator('.task-row', { hasText: 'Apples' }).click()
+      await page.locator('.task-panel button[title="Delete task"]').click()
+      await galleryShot('toast')
+      await page.locator('.sidebar-link', { hasText: 'Trash' }).click()
+      await page.locator('.trash-list li').first().waitFor()
+      await galleryShot('trash')
+      await page.locator('.trash-list li', { hasText: 'Apples' }).locator('button', { hasText: 'Restore' }).click()
+      await page.waitForTimeout(200)
+
+      // keyboard focus on a button and on a sidebar row
+      await page.locator('.sidebar-new > button').focus()
+      await page.keyboard.press('Tab')
+      await galleryShot('focus-link')
+      await row('Shopping').focus()
+      await page.keyboard.press('Shift+Tab')
+      await page.keyboard.press('Tab')
+      await galleryShot('focus-row')
+    }
+  }
+  await resize(1240, 800)
   await setTheme('System')
 
   console.log('\nAll checks passed.')
